@@ -4,7 +4,7 @@
 		<cconfiguration id="cdt.managedbuild.toolchain.gnu.cross.base.1982594378">
 			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.toolchain.gnu.cross.base.1982594378" moduleId="org.eclipse.cdt.core.settings" name="Default">
 				<macros>
-					<stringMacro name="MRF24J40" type="VALUE_TEXT" value=""/>
+					<stringMacro name="MRF24J40" type="VALUE_TEXT" value="1"/>
 				</macros>
 				<externalSettings/>
 				<extensions>

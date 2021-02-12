@@ -18,25 +18,24 @@
 #define MY_ADDRESS_LENGTH 8
 
 
-#define TARGET_SMALL
+//#define TARGET_SMALL
 
 
 #define TX_BUFFER_SIZE 200
 
-#define CONNECTION_SIZE 10
+#define CONNECTION_SIZE 0x7d
 
 #define __CATFEEDER__
 
 
-#define EUI_0 0x34
-#define EUI_1 0x34
-#define EUI_2 0x34
-#define EUI_3 0x34
-#define EUI_4 0x34
-#define EUI_5 0x34
-#define EUI_6 0x34
-#define EUI_7 0x34
-
+#define EUI_0 0x33
+#define EUI_1 0x22
+#define EUI_2 0x12
+#define EUI_3 0xff
+#define EUI_4 0xfe
+#define EUI_5 0xe8
+#define EUI_6 0x8d
+#define EUI_7 0xd9
 
 
 static void Nop()
@@ -48,7 +47,7 @@ static void Nop()
 #define TMRL 33
 
 
-#define MY_PAN_ID 0x3344
+#define MY_PAN_ID 0x3421
 
 
 extern int RFIF;
@@ -56,7 +55,7 @@ extern int RFIE;
 
 #define MRF24J40
 
-
+#define USE_DEFAULT
 
 
 #endif /* INC_CONFIGAPP_H_ */

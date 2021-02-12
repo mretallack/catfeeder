@@ -318,15 +318,12 @@
         
         if( MiMAC_ReceivedPacket() )
         {
-        	printf("Got MiMAC_ReceivedPacket\n");
-
             if( MiWiStateMachine.bits.RxHasUserData )
             {
+            	printf("ERROR no user data\n");
                 return;
             }
             
-            printf("Got MiMAC_ReceivedPacket RxHasUserData\n");
-
             rxMessage.flags.Val = 0;
             rxMessage.flags.bits.broadcast = MACRxPacket.flags.bits.broadcast;
             rxMessage.flags.bits.secEn = MACRxPacket.flags.bits.secEn;
@@ -382,8 +379,21 @@ HANDLE_DATA_PACKET:
                             }
                         #endif
                         
-                        if( MACRxPacket.PayloadLen < 10 )
+                        //if( MACRxPacket.PayloadLen < 10 )
                         {
+							printf("MACRxPacket.PayloadLen < 10, is %d\n",MACRxPacket.PayloadLen);
+
+                        	if (MACRxPacket.PayloadLen>0)
+                        	{
+								//This data is for the user, pass it up to them
+								rxMessage.PayloadSize = MACRxPacket.PayloadLen;
+								rxMessage.Payload = MACRxPacket.Payload;
+
+								MiWiStateMachine.bits.RxHasUserData = 1;
+
+
+                        	}
+
                             break;
                         }
                         
@@ -1368,8 +1378,9 @@ HANDLE_COMMAND_PACKET:
                                                 
                                                 if(entry == 0xFF)
                                                 {
-                                                    tempShortAddress.v[0] = 0x00;
-                                                    tempShortAddress.v[1] = j;
+                                                	// the sure pet seems to start from the last address, not the first???
+                                                    tempShortAddress.v[0] = 0x7f;
+                                                    tempShortAddress.v[1] = 0xff-j;
                                                     knownCoordinators |= (1<<j);
                                                     #if defined(ENABLE_NETWORK_FREEZER)
                                                         nvmPutKnownCoordinators(&knownCoordinators);
@@ -1421,6 +1432,9 @@ HANDLE_COMMAND_PACKET:
                                 }    
     
 START_ASSOCIATION_RESPONSE:                          
+
+								printf("Sending ASSOCIATION_RESPONSE %x %x\n", tempShortAddress.v[0], tempShortAddress.v[1]);
+
                                 //send back the asociation response
                                 TxBuffer[0] = MAC_COMMAND_ASSOCIATION_RESPONSE;
                                 TxBuffer[1] = tempShortAddress.v[0];
@@ -1948,11 +1962,21 @@ START_ASSOCIATION_RESPONSE:
             BYTE parentNode = (ShortAddress.v[1] & 0x07);
             BYTE i;
             
+            printf("RouteMessage\n");
+
             if( parentNode == myShortAddress.v[1] )
             {
+            	printf("parentNode == myShortAddress.v[1]\n");
+
+            	printf("ShortAddress.v[0] = %x\n", ShortAddress.v[0]);
+
                 // destination is my child
-                if( ShortAddress.v[0] > 0x80 )
+                //if( ShortAddress.v[0] > 0x80 )
+            	if( 0 )
                 {
+
+                	printf("ShortAddress.v[0] > 0x80\n");
+
                     #if defined(ENABLE_INDIRECT_MESSAGE)
                         // this is a sleeping device, need indirect message
                         #if defined(IEEE_802_15_4)
@@ -2598,8 +2622,11 @@ NO_INDIRECT_MESSAGE:
     BYTE findNextNetworkEntry(void)
     {
         BYTE i;
-        
+#ifndef USE_DEFAULT
+        for(i=CONNECTION_SIZE;i>=0; i--)
+#else
         for(i=0;i<CONNECTION_SIZE;i++)
+#endif        
         {
             if(ConnectionTable[i].status.bits.isValid == 0)
             {
@@ -3299,9 +3326,10 @@ NO_INDIRECT_MESSAGE:
     		MiApp_WriteData(MiWiCapacityInfo.Val);
             MiApp_WriteData(0x00);    // GTS
             MiApp_WriteData(0x00);    // Pending addresses
-            MiApp_WriteData(MIWI_PROTOCOL_ID);    // Protocol ID
-            MiApp_WriteData(MIWI_VERSION_NUM);    // Version Number
-            MiApp_WriteData(knownCoordinators);
+            MiApp_WriteData(MIWI_PROTOCOL_SUREPET_ID);    // Protocol ID
+            MiApp_WriteData(MIWI_SUREPET_VERSION_NUM);    // Version Number
+            //MiApp_WriteData(knownCoordinators);
+            MiApp_WriteData(0);
             #if ADDITIONAL_NODE_ID_SIZE > 0 
                 for(i = 0; i < ADDITIONAL_NODE_ID_SIZE; i++)
                 {
@@ -4817,7 +4845,11 @@ BOOL MiApp_StartConnection(BYTE Mode, BYTE ScanDuration, DWORD ChannelMap)
     {
         #if defined(NWK_ROLE_COORDINATOR)
             case START_CONN_DIRECT:
+#ifndef USE_DEFAULT
+                myShortAddress.Val = 0xfffe;
+#else
                 myShortAddress.Val = 0;
+#endif                
                 myParent = 0xFF;
                 #if MY_PAN_ID == 0xFFFF
                     myPANID.v[0] = TMRL;

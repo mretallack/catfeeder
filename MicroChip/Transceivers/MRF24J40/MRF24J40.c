@@ -944,7 +944,8 @@
             #if !defined(TARGET_SMALL)
                 IntraPAN = FALSE;
             #endif
-            transParam.altSrcAddr = TRUE;
+            transParam.altSrcAddr = FALSE;
+            headerLength += 6;
             transParam.flags.bits.ackReq = FALSE;
         }
     
@@ -968,7 +969,7 @@
         // set frame control MSB
         if( transParam.flags.bits.packetType == PACKET_TYPE_RESERVE )
         {
-            PHYSetLongRAMAddr(loc++, 0x80);
+            PHYSetLongRAMAddr(loc++, 0xC0);
             // sequence number
             PHYSetLongRAMAddr(loc++, IEEESeqNum++);
         }
@@ -1022,7 +1023,6 @@
         }
         
         #ifndef TARGET_SMALL
-#error bob
             // source PANID if necessary
             if( IntraPAN == FALSE )
             {
