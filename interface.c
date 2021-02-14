@@ -84,7 +84,6 @@ int RFIF_PIN()
 
     	_INT1Interrupt();
 
-		printf("RFIF_PIN %d\n",res);
 	}
 
 	return(res);

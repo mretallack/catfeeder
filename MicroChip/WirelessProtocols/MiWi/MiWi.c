@@ -347,7 +347,7 @@
             MiWiStateMachine.bits.RxHasUserData = 0;
     
 
-            printf("Got MiMAC_ReceivedPacket %x\n", MACRxPacket.flags.bits.packetType);
+            //printf("Got MiMAC_ReceivedPacket %x\n", MACRxPacket.flags.bits.packetType);
 
             //determine what type of packet it is.
             switch(MACRxPacket.flags.bits.packetType)
@@ -381,7 +381,7 @@ HANDLE_DATA_PACKET:
                         
                         //if( MACRxPacket.PayloadLen < 10 )
                         {
-							printf("MACRxPacket.PayloadLen < 10, is %d\n",MACRxPacket.PayloadLen);
+							//printf("MACRxPacket.PayloadLen < 10, is %d\n",MACRxPacket.PayloadLen);
 
                         	if (MACRxPacket.PayloadLen>0)
                         	{

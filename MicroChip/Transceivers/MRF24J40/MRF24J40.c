@@ -1076,10 +1076,13 @@
         
         
         // write the payload
+        printf("Sending: ");
         for(i = 0; i < MACPayloadLen; i++)
         {
+        	printf("%x ", MACPayload[i]);
             PHYSetLongRAMAddr(loc++, MACPayload[i]);
         }
+        printf("\n");
         
         MRF24J40Status.bits.TX_BUSY = 1;
     
@@ -1690,7 +1693,6 @@
 
                 if(flags.bits.RF_TXIF)
                 {
-                    printf("flags.Val=%x\n",flags.Val);
 
                     //if the TX interrupt was triggered
                     //clear the busy flag indicating the transmission was complete
@@ -1724,8 +1726,6 @@
                 
                 if(flags.bits.RF_RXIF)
                 {  
-                    printf("flags.Val=%x\n",flags.Val);
-
                     BYTE RxBank = 0xFF;
                     
                     for(i = 0; i < BANK_SIZE; i++)
