@@ -1076,13 +1076,13 @@
         
         
         // write the payload
-        printf("Sending: ");
+        //printf("Sending: ");
         for(i = 0; i < MACPayloadLen; i++)
         {
-        	printf("%x ", MACPayload[i]);
+        	//printf("%x ", MACPayload[i]);
             PHYSetLongRAMAddr(loc++, MACPayload[i]);
         }
-        printf("\n");
+//        printf("\n");
         
         MRF24J40Status.bits.TX_BUSY = 1;
     

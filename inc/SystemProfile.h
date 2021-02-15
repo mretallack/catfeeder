@@ -17,8 +17,9 @@
 #define MRF24J40
 #endif
 
-
-#define RX_BUFFER_SIZE 20
+// 11 + 8  + 8 + 12
+// 91
+#define RX_BUFFER_SIZE 70
 
 
 #define INPUT

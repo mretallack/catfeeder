@@ -31,6 +31,41 @@ int RF_INT_PIN;
 #define RADIO_RESET 	21  //6
 
 
+void spi_int(void )
+{
+	printf("Starting int thread\n");
+
+	int res = digitalRead(RADIO_INT);
+
+	printf("res: %x\n",res);
+	if (res==0)
+	{
+		RFIE=1;
+		RFIF=1;
+
+		_INT1Interrupt();
+
+	}
+
+}
+
+void check_int()
+{
+	int res = digitalRead(RADIO_INT);
+
+	if (res==0)
+	{
+		RFIE=1;
+		RFIF=1;
+
+    	_INT1Interrupt();
+
+	}
+}
+
+
+pthread_t thread;
+
 void setup_spi()
 {
 	wiringPiSetup();
@@ -42,6 +77,12 @@ void setup_spi()
 
 	// set GPIO 76 as input for INT line
 	pinMode(RADIO_INT, INPUT);
+
+
+	//pthread_create(&thread, NULL, thread_int, NULL);
+
+	//wiringPiISR(RADIO_INT, INT_EDGE_FALLING, spi_int);
+
 }
 
 
@@ -72,10 +113,8 @@ void RFIF_CLEAR()
 
 int RFIF_PIN()
 {
-
+#if 1
 	int res = digitalRead(RADIO_INT);
-
-	//printf("%d\n",res);
 
 	if (res==0)
 	{
@@ -85,9 +124,10 @@ int RFIF_PIN()
     	_INT1Interrupt();
 
 	}
-
-	return(res);
+#endif
+	return(0);
 }
+
 
 
 void PHYSetLongRAMAddr(WORD address, BYTE value)
