@@ -17,7 +17,7 @@
 int debug = 0;
 
 /**
- * Define the key used to encode the 0x01 messsages
+ * Define the key used to encode the 0x01 messages
  */
 BYTE key[] = { 0x00,0x00,0x00,0x58,0x00,0x6c,0x5a,0x71,0xba,0x96,0x33,0xf8,0xc7,0xfc,
 		0x4e,0xaf,0xce,0x9e,0xe2,0x03,0xc3,0xa8,0x9e,0xe4,0x98,0x82,0x2b,0xa0,0x0d,0x9b,
@@ -421,7 +421,15 @@ int main(int argc, char **argv) {
 									printf("ChipID: %s\n", chipID);
 								}
 
+								// get the lid state
 								BYTE lidState = rxPayload[22];
+
+								// and get the amount of time the lid is open
+								unsigned short openTime =
+										((unsigned short)rxPayload[23]) |
+										((unsigned short)rxPayload[24]<<8);
+
+
 
 								// 00 Tag triggered - closed to Open
 								// 01 Tag triggered - open to closed
@@ -430,31 +438,46 @@ int main(int argc, char **argv) {
 								// 06 zeroed when user opened
 
 								const char *lidStateString ="";
+								const char *petFeedingStateString ="";
+								const char *userOpenStateString ="";
 
 								switch(lidState)
 								{
 									case 0x00:
-										lidStateString="opened";
+										lidStateString="true";
+										petFeedingStateString="true";
+										userOpenStateString="false";
 										break;
 
 									case 0x01:
-										lidStateString="closed";
+										lidStateString="false";
+										petFeedingStateString="false";
+										userOpenStateString="false";
 										break;
 
 									case 0x04:
-										lidStateString="userOpened";
+										lidStateString="true";
+										petFeedingStateString="false";
+										userOpenStateString="true";
 										break;
 
 									case 0x05:
-										lidStateString="userClosed";
+										lidStateString="false";
+										petFeedingStateString="false";
+										userOpenStateString="false";
 										break;
 
 									case 0x06:
-										lidStateString="userZero";
+										lidStateString="false";
+										petFeedingStateString="false";
+										userOpenStateString="true"; // TODO: check???
 										break;
 
 									default:
-										lidStateString="unknown";
+										// by default assume all closed
+										lidStateString="false";
+										petFeedingStateString="false";
+										userOpenStateString="false";
 										break;
 								}
 
@@ -463,11 +486,48 @@ int main(int argc, char **argv) {
 									printf("LidState %x, %s\n",lidState, lidStateString);
 								}
 
-								sprintf(topicName, "petfeeder/%s/lidstate", srcAddr);
+								// send the lid state
+								sprintf(topicName, "petfeeder/%s/lidState", srcAddr);
 
-								int res = mosquitto_publish(m, NULL, topicName,
+								res = mosquitto_publish(m, NULL, topicName,
 												strlen(lidStateString), lidStateString, 0, false);
 
+								// send the pet feeding state
+								sprintf(topicName, "petfeeder/%s/petFeeding", srcAddr);
+
+								res = mosquitto_publish(m, NULL, topicName,
+												strlen(petFeedingStateString), petFeedingStateString, 0, false);
+
+								// TODO: when there are multiple feeders, it would be nice to have
+								// individual pet states here. one way to do this is to publish another
+								// state for individual pets
+								sprintf(topicName, "pet/%s/petFeeding", chipID);
+
+								res = mosquitto_publish(m, NULL, topicName,
+												strlen(petFeedingStateString), petFeedingStateString, 0, false);
+
+								// if we have an open time
+								if (openTime>0)
+								{
+									char value[30];
+
+									sprintf(topicName, "pet/%s/petFeedingTime", chipID);
+
+									sprintf(value, "%d", openTime);
+
+									res = mosquitto_publish(m, NULL, topicName,
+													strlen(value), value, 0, false);
+								}
+
+								// send the user open state
+								sprintf(topicName, "petfeeder/%s/userOpen", srcAddr);
+
+								res = mosquitto_publish(m, NULL, topicName,
+												strlen(userOpenStateString), userOpenStateString, 0, false);
+
+
+
+								// now do the food weight
 								const char *weightStrings[] = {"leftOpen", "leftClose", "rightOpen", "rightClose"};
 
 								for (int weightEntry=0; weightEntry<4; weightEntry++)
@@ -485,7 +545,7 @@ int main(int argc, char **argv) {
 
 										sprintf(value, "%f", weigth);
 
-										int res = mosquitto_publish(m, NULL, topicName,
+										res = mosquitto_publish(m, NULL, topicName,
 														strlen(value), value, 0, false);
 
 									}
