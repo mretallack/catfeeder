@@ -1296,7 +1296,7 @@ ThisPacketIsForMe:
                 //if it is a command packet
                 case PACKET_TYPE_COMMAND:
 HANDLE_COMMAND_PACKET:
-					printf("PACKET_TYPE_COMMAND\n");
+
 
                     //figure out which command packet it is
                     switch(MACRxPacket.Payload[0])
@@ -1432,8 +1432,6 @@ HANDLE_COMMAND_PACKET:
                                 }    
     
 START_ASSOCIATION_RESPONSE:                          
-
-								printf("Sending ASSOCIATION_RESPONSE %x %x\n", tempShortAddress.v[0], tempShortAddress.v[1]);
 
                                 //send back the asociation response
                                 TxBuffer[0] = MAC_COMMAND_ASSOCIATION_RESPONSE;
@@ -1714,25 +1712,15 @@ START_ASSOCIATION_RESPONSE:
                         
                         #ifdef NWK_ROLE_COORDINATOR
                             case MAC_COMMAND_BEACON_REQUEST:
-                            	printf("MAC_COMMAND_BEACON_REQUEST\n");
                                 {
                                     if( ConnMode > ENABLE_ACTIVE_SCAN_RSP )
                                     {
-                                    	printf("ConnMode > ENABLE_ACTIVE_SCAN_RSP\n");
                                         break;
                                     }
                                 
                                     //if we are a member of a network
                                     if(MiWiStateMachine.bits.memberOfNetwork)
                                     {
-                                        if( MACRxPacket.Payload[1] != currentChannel )
-                                        {
-                                        	printf("MACRxPacket.Payload[1] != currentChannel\n");
-                                        //    break;
-
-
-                                    	}
-                                        
                                         //send out a beacon as long as we are not
                                         //currently acting as an FFD end device
                                         if(role != ROLE_FFD_END_DEVICE)
