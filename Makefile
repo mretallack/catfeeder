@@ -11,7 +11,7 @@ OBJS = interface.o ${MIWI_OBJS} CatFeeder.o
 
 CFLAGS +=-I${PROJECT_ROOT}inc -I${PROJECT_ROOT}/MicroChip/Include
 
-LDFLAGS += -lwiringPi -lpthread
+LDFLAGS += -lwiringPi -lpthread  -lmosquitto
 
 ifeq ($(BUILD_MODE),debug)
 	CFLAGS += -g

@@ -256,14 +256,8 @@ MIWI_TICK MiWi_TickGet(void)
 
     timespecsub(&ts, &start_ts,&res);
 
-    //printf("sec %ld\n", res.tv_sec);
-
-//long t = res.tv_nsec/1000000;
-    //printf("t %ld\n", res.tv_nsec);
-
     currentTime.Val = (int)(res.tv_sec* 1000) + (int)(res.tv_nsec/1000000);
 
-  //  printf("Val %d\n", currentTime.Val);
 #else
 	#error "Symbol timer implementation required for stack usage."
 #endif

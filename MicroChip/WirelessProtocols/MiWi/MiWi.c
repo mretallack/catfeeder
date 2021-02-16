@@ -346,9 +346,6 @@
             
             MiWiStateMachine.bits.RxHasUserData = 0;
     
-
-            //printf("Got MiMAC_ReceivedPacket %x\n", MACRxPacket.flags.bits.packetType);
-
             //determine what type of packet it is.
             switch(MACRxPacket.flags.bits.packetType)
             {
@@ -381,8 +378,6 @@ HANDLE_DATA_PACKET:
                         
                         //if( MACRxPacket.PayloadLen < 10 )
                         {
-							//printf("MACRxPacket.PayloadLen < 10, is %d\n",MACRxPacket.PayloadLen);
-
                         	if (MACRxPacket.PayloadLen>0)
                         	{
 								//This data is for the user, pass it up to them
@@ -394,6 +389,7 @@ HANDLE_DATA_PACKET:
 
                         	}
 
+                        	// for exit and dont run the rest of the code
                             break;
                         }
                         
@@ -1950,20 +1946,13 @@ START_ASSOCIATION_RESPONSE:
             BYTE parentNode = (ShortAddress.v[1] & 0x07);
             BYTE i;
             
-            printf("RouteMessage\n");
 
             if( parentNode == myShortAddress.v[1] )
             {
-            	printf("parentNode == myShortAddress.v[1]\n");
-
-            	printf("ShortAddress.v[0] = %x\n", ShortAddress.v[0]);
-
                 // destination is my child
                 //if( ShortAddress.v[0] > 0x80 )
             	if( 0 )
                 {
-
-                	printf("ShortAddress.v[0] > 0x80\n");
 
                     #if defined(ENABLE_INDIRECT_MESSAGE)
                         // this is a sleeping device, need indirect message

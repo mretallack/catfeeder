@@ -48,8 +48,6 @@ static sem_t sem;
 
 void radio_interrupt(void)
 {
-	printf("radio_interrupt\n");
-	
 	sem_post(&sem);
 }
 
@@ -65,15 +63,6 @@ int wait_for_interupt(int timeout)
 	int s;
 	struct timespec ts;
 
-
-	int bob = digitalRead(RADIO_INT);
-
-	if (bob==0)
-	{
-		printf("Int low\n");
-
-	}
-
 	// get the current time
 	clock_gettime(CLOCK_REALTIME, &ts);
 
@@ -83,15 +72,15 @@ int wait_for_interupt(int timeout)
 	// ok, wait for the semaphore event
 	s = sem_timedwait(&sem, &ts);
 
-	printf("Wake up\n");
-
 	if (s==0)
 	{
-		printf("Processing interrupt\n");
-
 		_INT1Interrupt();
 
 		res=1;
+	}
+	else
+	{
+		printf("Timeout waiting for interrupt\n");
 	}
 
 	return(res);
@@ -202,36 +191,22 @@ void RFIF_SET()
 
 }
 
+/**
+ * Stub functions
+ */
 void RFIF_CLEAR()
 {
 
 }
 
+/**
+ * Funtion to action any interrupt that has happened
+ */
 int RFIF_PIN()
 {
 
-
 	wait_for_interupt(100);
 
-
-#if 0
-	int res;
-
-
-
-	res = digitalRead(RADIO_INT);
-
-	if (res==0)
-	{
-		//RFIE=1;
-		//RFIF=1;
-		
-		printf("RADIO_INT=  0\n");
-
-    	_INT1Interrupt();
-
-	}
-#endif
 	return(0);
 }
 

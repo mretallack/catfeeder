@@ -2,10 +2,19 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <time.h>
+#include <errno.h>
 
 #include "WirelessProtocols/MCHP_API.h"
 
+#include <mosquitto.h>
+
 #include "interface.h"
+
+
+/**
+ * debug flag
+ */
+int debug = 0;
 
 /**
  * Define the key used to encode the 0x01 messsages
@@ -24,11 +33,14 @@ void send_msg(BYTE *buff, int buffSize) {
 	extern MAC_TRANS_PARAM MTP;
 	TxData = 0;
 
-	printf("TX: ");
-	for (int i = 0; i < buffSize; i++) {
-		printf("%02x ", buff[i]);
+	if (debug)
+	{
+		printf("TX: ");
+		for (int i = 0; i < buffSize; i++) {
+			printf("%02x ", buff[i]);
+		}
+		printf("\n");
 	}
-	printf("\n");
 
 	for (int i = 0; i < buffSize; i++) {
 		MiApp_WriteData(buff[i]);
@@ -90,232 +102,439 @@ time_t getMSTime()
 
 
 /**
+ * Helper to get the weight
+ */
+float getWeigth(BYTE rxPayload[], int weightEntry)
+{
+	// get the weight
+	long rawWeigth =
+		(((long)rxPayload[26 + (weightEntry*4)])) |
+		(((long)rxPayload[27 + (weightEntry*4)])<<8) |
+		(((long)rxPayload[28 + (weightEntry*4)])<<16) |
+		(((long)rxPayload[29 + (weightEntry*4)])<<24);
+
+	float weigth=((float)rawWeigth)/100;
+
+	return(weigth);
+}
+
+
+/**
  * Main entry point
  */
 int main(int argc, char **argv) {
 
-	setup_spi();
+	//const char *clientID = "catfeeder";
+	const char *brokerName ="127.0.0.1";
+	int brokerPort = 1883;
+	int keepAlive = 60;
+	int verbose = 0;
 
-	printf("Setup\n");
-
-	// and setup the protocol
-	MiApp_ProtocolInit(FALSE);
-
-	printf("Set Channel\n");
-
-	if (MiApp_SetChannel(0x0f) == FALSE) {
-		printf("Set channel failed\n");
-		return (1);
-	}
-
-	printf("Set connection mode\n");
-
-	MiApp_ConnectionMode(ENABLE_ALL_CONN);
-
-	// start the connection state
-	MiApp_StartConnection(START_CONN_DIRECT, 10, 0xFFFFFFFF);
-
-
-	printf("Wait for packet....\n");
-
-	int chann = 0x0f;
-	MiApp_SetChannel(chann);
+	int disconnected = 0;
 
 	BYTE sequence = 0xa8;
 	BYTE beaconAckSequence = 0x0;
 
-	int currnetState = STATE_WAITING_FOR_STARTUP_ACK;
-	int dump = 1;
+	int currentState = STATE_WAITING_FOR_STARTUP_ACK;
 
-	time_t lastEvent = 0;
+	int chann = 0x0f;
+	struct mosquitto *m;
 
+	int c;
 
-	// The main loop
-	while (1) {
+	opterr = 0;
 
-		// check if a message is available, and if so process it
-		if (MiApp_MessageAvailable()) {
+	while ((c = getopt (argc, argv, "dvh:p:k:")) != -1)
+	{
+		switch (c)
+		{
 
-			// ok, read the RxMessage
-			printf("Message ready\n");
-
-			// get the last event timestamp
-			lastEvent = getMSTime();
-
-			// take a copy of the payload
-			BYTE rxPayload[200];
-			int rxPayloadSize = rxMessage.PayloadSize;
-			memcpy(rxPayload, rxMessage.Payload, rxPayloadSize);
-
-			// reset the state ready for the next message
-			MiApp_DiscardMessage();
-
-			// see if we want to dump the payload
-			if (dump) {
-				printf("RX: ");
-				for (int i = 0; i < rxPayloadSize; i++) {
-					printf("%02x ", rxPayload[i]);
-				}
-				printf("\n");
-			}
-
-			// get the message type and sequence ID
-			int msgType = rxPayload[0];
-			int seqId = rxPayload[1];
-
-			printf("State: %d\n", currnetState);
-
-			switch (currnetState) {
-
-			/**
-			 * Wait for a startup packet, or a beacon
-			 */
-			case STATE_WAITING_FOR_STARTUP_ACK:
-				// got 13 69 4 3
-				if (msgType == 0x13) {
-					// this seems to be some sort of ack?
-
-					BYTE payload[] = { 0x14, 0xa8, 0x70, 0x00 };
-					// add the squence ID
-					payload[1] = sequence++;
-					// need the sequence from the previous for this one
-					payload[2] = rxPayload[1];
-					// I think 00 is "ok", it is else where in the stack
-
-					// and send it
-					send_msg(payload, sizeof(payload));
-
-					currnetState = STATE_WAITING_FOR_BEACON;
-				}
-				else if (msgType == 0x08) {
-
-					// go straight to waiting for beacon
-					currnetState = STATE_WAITING_FOR_BEACON;
-				}
-
+			case 'd':
+				debug = 1;
+				break;
+			case 'v':
+				verbose = 1;
+				break;
+			case 'h':
+				brokerName = optarg;
 				break;
 
-
-			/**
-			 * Wait for a beacon frame from the device
-			 */
-			case STATE_WAITING_FOR_BEACON:
-
-				// check if this is a beacon
-				if (msgType == 0x08 ) {
-
-					BYTE payload[] = { 0x0a, 0xb8, 0x6c };
-
-					// set the sequence ID
-					payload[1] = sequence++;
-					// and each device has a seperate beacon ACK id
-					payload[2] = beaconAckSequence++;
-
-					// ok, see if the end device has something waiting
-					// if offset 2 contains a "1", its means the device
-					// has something to tell us
-					if (rxPayload[2] != 0x00)
-					{
-						printf("Message available, requesting...\n");
-						// ok, somthing is waiting, so send 0x09
-						payload[0] = 0x09;
-
-						// and we need to wait for event data
-						currnetState = STATE_WAITING_FOR_EVENTDATA;
-					}
-					else
-					{
-						// no event data, so just stay in this state
-						currnetState = STATE_WAITING_FOR_BEACON;
-					}
-
-					// and send...
-					send_msg(payload, sizeof(payload));
-
-				}
-				else if (msgType == 0x13) {
-
-					// need to go back to waiting for startup ack
-					currnetState = STATE_WAITING_FOR_STARTUP_ACK;
-				}
-
+			case 'p':
+				brokerPort = atoi(optarg);
 				break;
 
+			case 'k':
+				keepAlive = atoi(optarg);
+				break;
+			default:
+				break;
+		}
+	}
 
-			/**
-			 * Wait for Event data
-			 */
-			case STATE_WAITING_FOR_EVENTDATA:
+	setup_spi();
 
-				// see if this is event data
-				if (msgType == 0x01) {
+	// and setup the protocol
+	MiApp_ProtocolInit(FALSE);
 
-					printf("RX: ");
-					for (int i = 0; i < rxPayloadSize; i++) {
 
-						//if (i >= 6) {
-						rxPayload[i] = rxPayload[i] ^ key[i];
-						//}
-						printf("%02x ", rxPayload[i]);
+	if (MiApp_SetChannel(chann) == FALSE)
+	{
+		printf("Set channel failed\n");
+	}
+	else
+	{
+		// setup miwi
+		MiApp_ConnectionMode(ENABLE_ALL_CONN);
+
+		// start the connection state
+		MiApp_StartConnection(START_CONN_DIRECT, 10, 0xFFFFFFFF);
+
+		MiApp_SetChannel(chann);
+
+		// create a new client, using clean session
+		// auto allocate name
+		m = mosquitto_new(NULL, true, &disconnected);
+
+		// set the reconnect settings
+		mosquitto_reconnect_delay_set(m, 2, 30, true);
+
+		int res = mosquitto_connect(m, brokerName, brokerPort, keepAlive);
+
+		if (res != MOSQ_ERR_SUCCESS)
+		{
+			printf("Failed to connect to MQTT broker: %d, %s\n", res, strerror(errno));
+		}
+		else if (mosquitto_loop_start(m) != MOSQ_ERR_SUCCESS)
+		{
+			printf("Failed to start mosquitto\n");
+		}
+		else
+		{
+			// The main loop
+			while (1) {
+
+				char topicName[100];
+
+				// check if a message is available, and if so process it
+				if (MiApp_MessageAvailable()) {
+
+					char srcAddr[20];
+					BYTE rxPayload[200];
+
+					// ok, read the RxMessage
+
+					// take a copy of the payload
+					int rxPayloadSize = rxMessage.PayloadSize;
+					memcpy(rxPayload, rxMessage.Payload, rxPayloadSize);
+
+
+					sprintf(srcAddr, "%02x%02x%02x%02x%02x%02x%02x%02x",
+							rxMessage.SourceAddress[8],
+							rxMessage.SourceAddress[7],
+							rxMessage.SourceAddress[6],
+							rxMessage.SourceAddress[5],
+							rxMessage.SourceAddress[4],
+							rxMessage.SourceAddress[3],
+							rxMessage.SourceAddress[2],
+							rxMessage.SourceAddress[1],
+							rxMessage.SourceAddress[0]);
+
+
+
+					// reset the state ready for the next message
+					MiApp_DiscardMessage();
+
+					// see if we want to dump the payload
+					if (debug) {
+						printf("RX: ");
+						for (int i = 0; i < rxPayloadSize; i++) {
+							printf("%02x ", rxPayload[i]);
+						}
+						printf("\n");
+					}
+
+					// get the message type and sequence ID
+					int msgType = rxPayload[0];
+					int seqId = rxPayload[1];
+
+
+					switch (currentState) {
+
+					/**
+					 * Wait for a startup packet, or a beacon
+					 */
+					case STATE_WAITING_FOR_STARTUP_ACK:
+						// got 13 69 4 3
+						if (msgType == 0x13) {
+							// this seems to be some sort of ack?
+
+							BYTE payload[] = { 0x14, 0xa8, 0x70, 0x00 };
+							// add the squence ID
+							payload[1] = sequence++;
+							// need the sequence from the previous for this one
+							payload[2] = rxPayload[1];
+							// I think 00 is "ok", it is else where in the stack
+
+							// and send it
+							send_msg(payload, sizeof(payload));
+
+							currentState = STATE_WAITING_FOR_BEACON;
+						}
+						else if (msgType == 0x08) {
+
+							// go straight to waiting for beacon
+							currentState = STATE_WAITING_FOR_BEACON;
+						}
+
+						break;
+
+
+					/**
+					 * Wait for a beacon frame from the device
+					 */
+					case STATE_WAITING_FOR_BEACON:
+
+						// check if this is a beacon
+						if (msgType == 0x08 ) {
+
+							BYTE payload[] = { 0x0a, 0xb8, 0x6c };
+
+							// set the sequence ID
+							payload[1] = sequence++;
+							// and each device has a seperate beacon ACK id
+							payload[2] = beaconAckSequence++;
+
+							// ok, see if the end device has something waiting
+							// if offset 2 contains a "1", its means the device
+							// has something to tell us
+							if (rxPayload[2] != 0x00)
+							{
+								printf("Event available, requesting...\n");
+								// ok, somthing is waiting, so send 0x09
+								payload[0] = 0x09;
+
+								// and we need to wait for event data
+								currentState = STATE_WAITING_FOR_EVENTDATA;
+							}
+							else
+							{
+								// no event data, so just stay in this state
+								currentState = STATE_WAITING_FOR_BEACON;
+							}
+
+							// and send...
+							send_msg(payload, sizeof(payload));
+
+						}
+						else if (msgType == 0x13) {
+
+							// need to go back to waiting for startup ack
+							currentState = STATE_WAITING_FOR_STARTUP_ACK;
+						}
+
+						break;
+
+
+					/**
+					 * Wait for Event data
+					 */
+					case STATE_WAITING_FOR_EVENTDATA:
+
+						// see if this is event data
+						if (msgType == 0x01) {
+
+							// "decrypt" the payload
+							for (int i = 0; i < rxPayloadSize; i++)
+							{
+								rxPayload[i] = rxPayload[i] ^ key[i];
+							}
+
+							if (debug)
+							{
+								printf("RXDECODE: ");
+								for (int i = 0; i < rxPayloadSize; i++) {
+									printf("%02x ", rxPayload[i]);
+								}
+								printf("\n");
+							}
+
+							int msgLength=rxPayload[6];
+							int msgSubType=rxPayload[7];
+
+							if (verbose)
+							{
+								printf("Message Type %x\n", msgSubType);
+							}
+
+							// ok, decode
+							if (msgSubType==0x18)
+							{
+
+								// cat tag add
+								// 01 bb 2a 00 b1 00 29 18 00 b4
+								// 00 b4 56 98 54 01 13 c5 b7 7f
+								// 00 03 00 00 00 02 5f fd ff ff
+								// 00 00 00 00 fe ff ff ff 00 00
+								// 00 00 12 00 23 01 00 00 b7
+
+
+								// cat tag remove
+								// 01 bf 2a 00 dc 00 29 18 00 b5
+								// 00 c3 56 98 54 01 13 c5 b7 7f
+								// 00 03 01 0a 00 02 5f fd ff ff
+								// 78 fd ff ff fe ff ff ff 02 00
+								// 00 00 13 00 23 01 00 00 12 16
+								// 00 b6 00 c5 56 98 54 00 01 af
+								// 8a 6e 04 7e be f6 03 b7
+
+
+								// manual???
+								// 01 c8 2a 00 b1 00 29 18 00 bd
+								// 00 cc 56 98 54 01 02 03 04 05
+								// 06 07 06 00 00 02 00 00 00 00
+								// 7a fd ff ff 00 00 00 00 03 00
+								// 00 00 13 00 23 01 00 00 fa
+
+								// cat - opening
+								// 01 ea 2a 00 b1 00 29 18 00 c1
+								// 00 cf 57 98 54 3d 05 1f db 63
+								// f6 01 00 00 00 02 6d 16 00 00
+								// 00 00 00 00 fe ff ff ff 00 00
+								// 00 00 14 00 23 01 00 00 13
+
+								// get the chip ID
+								BYTE chipID[20];
+
+
+								sprintf(chipID, "%02x%02x%02x%02x%02x%02x%02x",
+										rxPayload[15],
+										rxPayload[16],
+										rxPayload[17],
+										rxPayload[18],
+										rxPayload[19],
+										rxPayload[20],
+										rxPayload[21],
+										rxPayload[22]);
+
+								if (verbose)
+								{
+									printf("ChipID: %s\n", chipID);
+								}
+
+								BYTE lidState = rxPayload[22];
+
+								// 00 Tag triggered - closed to Open
+								// 01 Tag triggered - open to closed
+								// 04 User triggered - Open
+								// 05 User triggered - Close
+								// 06 zeroed when user opened
+
+								const char *lidStateString ="";
+
+								switch(lidState)
+								{
+									case 0x00:
+										lidStateString="opened";
+										break;
+
+									case 0x01:
+										lidStateString="closed";
+										break;
+
+									case 0x04:
+										lidStateString="userOpened";
+										break;
+
+									case 0x05:
+										lidStateString="userClosed";
+										break;
+
+									case 0x06:
+										lidStateString="userZero";
+										break;
+
+									default:
+										lidStateString="unknown";
+										break;
+								}
+
+								if (verbose)
+								{
+									printf("LidState %x, %s\n",lidState, lidStateString);
+								}
+
+								sprintf(topicName, "petfeeder/%s/lidstate", srcAddr);
+
+								int res = mosquitto_publish(m, NULL, topicName,
+												strlen(lidStateString), lidStateString, 0, false);
+
+								const char *weightStrings[] = {"leftOpen", "leftClose", "rightOpen", "rightClose"};
+
+								for (int weightEntry=0; weightEntry<4; weightEntry++)
+								{
+									char value[30];
+
+									float weigth = getWeigth(rxPayload, weightEntry);
+
+									// only publish if not zero for now
+									// on open, the value is zero for the "on close " weight
+									if (weigth != 0)
+									{
+
+										sprintf(topicName, "petfeeder/%s/%s_weight", srcAddr, weightStrings[weightEntry]);
+
+										sprintf(value, "%f", weigth);
+
+										int res = mosquitto_publish(m, NULL, topicName,
+														strlen(value), value, 0, false);
+
+									}
+								}
+
+							}
+
+							// send the ACK
+							BYTE payload[] = { 0x02,0x5a,0x5e,0x00 };
+
+							// set the sequence ID
+							payload[1] = sequence++;
+							// add in the sequence number of the 0x01 message we have received
+							payload[2] = rxPayload[1];
+
+							// and send it...
+							send_msg(payload, sizeof(payload));
+
+							currentState = STATE_WAITING_FOR_EVENTACK;
+						}
+						else
+						{
+							// if we get something we dont expect, go back to beacon
+							currentState = STATE_WAITING_FOR_BEACON;
+						}
+						break;
+
+					/**
+					 * Wait for an ACK from the EVENT message
+					 */
+					case STATE_WAITING_FOR_EVENTACK:
+
+						if (msgType == 0x0a) {
+
+							// ok, dont need to do anythin here, just go
+							// back to beacon
+							currentState = STATE_WAITING_FOR_BEACON;
+						}
+						else
+						{
+							// unknown payload, so go back to beacon for now
+							// we should really re-transmit
+							currentState = STATE_WAITING_FOR_BEACON;
+						}
+
+						break;
 
 					}
-					printf("\n");
-
-
-					int msgLength=rxPayload[6];
-					int msgSubType=rxPayload[7];
-
-					printf("Message Length %x, Type %x\n",msgLength, msgSubType);
-
-					// ok, decode
-					if (msgSubType==0x18)
-					{
-						BYTE lidState = rxPayload[21];
-
-						printf("LidState %x, %x\n",lidState);
-
-					}
-
-					// send the ACK
-					BYTE payload[] = { 0x02,0x5a,0x5e,0x00 };
-
-					// set the sequence ID
-					payload[1] = sequence++;
-					// add in the sequence number of the 0x01 message we have received
-					payload[2] = rxPayload[1];
-
-					// and send it...
-					send_msg(payload, sizeof(payload));
-
-					currnetState = STATE_WAITING_FOR_EVENTACK;
 				}
-				else
-				{
-					// if we get something we dont expect, go back to beacon
-					currnetState = STATE_WAITING_FOR_BEACON;
-				}
-				break;
-
-			/**
-			 * Wait for an ACK from the EVENT message
-			 */
-			case STATE_WAITING_FOR_EVENTACK:
-
-				if (msgType == 0x0a) {
-
-					// ok, dont need to do anythin here, just go
-					// back to beacon
-					currnetState = STATE_WAITING_FOR_BEACON;
-				}
-				else
-				{
-					// unknown payload, so go back to beacon for now
-					// we should really re-transmit
-					currnetState = STATE_WAITING_FOR_BEACON;
-				}
-
-				break;
-
 			}
 		}
 	}
