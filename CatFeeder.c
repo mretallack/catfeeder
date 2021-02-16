@@ -253,7 +253,6 @@ int main(int argc, char **argv) {
 
 
 					sprintf(srcAddr, "%02x%02x%02x%02x%02x%02x%02x%02x",
-							rxMessage.SourceAddress[8],
 							rxMessage.SourceAddress[7],
 							rxMessage.SourceAddress[6],
 							rxMessage.SourceAddress[5],
@@ -282,6 +281,20 @@ int main(int argc, char **argv) {
 					int seqId = rxPayload[1];
 
 
+					sprintf(topicName, "petfeeder/%s/message", srcAddr);
+
+					char payloadTxt[400];
+					payloadTxt[0]=0;
+					for (int i = 0; i < rxPayloadSize; i++) {
+						char tmp[30];
+						sprintf(tmp, "%02x ", rxPayload[i]);
+						strcat(payloadTxt, tmp);
+					}
+						
+					res = mosquitto_publish(m, NULL, topicName,
+									strlen(payloadTxt), payloadTxt, 0, false);
+									
+											
 					switch (currentState) {
 
 					/**
