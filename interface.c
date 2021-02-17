@@ -222,7 +222,7 @@ void RFIF_CLEAR()
 int RFIF_PIN()
 {
 
-	wait_for_interupt(100);
+	wait_for_interupt(30);
 
 	return(0);
 }

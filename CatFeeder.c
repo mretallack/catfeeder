@@ -27,6 +27,7 @@
 #include <unistd.h>
 #include <time.h>
 #include <errno.h>
+#include <sys/queue.h>
 
 #include "WirelessProtocols/MCHP_API.h"
 
@@ -40,10 +41,28 @@
  */
 int debug = 0;
 
+
+/**
+ * Define the pet_entry
+ */
+struct pet_entry {
+
+	// define the MAC
+	char *chipID;
+	// and the total feeding time for the day
+	int totalDailyFeedingTime;
+	// and the totol g eaten
+	float totalDailyEaten;
+
+	// list management
+    TAILQ_ENTRY(pet_entry) entries;
+};
+
+
 /**
  * Define the key used to encode the 0x01 messages
  */
-BYTE key[] = { 0x00,0x00,0x00,0x58,0x00,0x6c,0x5a,0x71,0xba,0x96,0x33,0xf8,0xc7,0xfc,
+static BYTE key[] = { 0x00,0x00,0x00,0x58,0x00,0x6c,0x5a,0x71,0xba,0x96,0x33,0xf8,0xc7,0xfc,
 		0x4e,0xaf,0xce,0x9e,0xe2,0x03,0xc3,0xa8,0x9e,0xe4,0x98,0x82,0x2b,0xa0,0x0d,0x9b,
 		0xc7,0xbd,0xe0,0x54,0xd5,0xdd,0x4a,0xb0,0x2b,0xa6,0x1a,0x01,0xfa,0x47,0x7a,0xec,0x12,
 		0x48,0x11,0x27,0x3f,0x59,0xee,0x84,0x8b,0x93,0x03,0x90,0x3b,0x3a,0xcd,0x74,0x67,0x8f,
@@ -53,7 +72,7 @@ BYTE key[] = { 0x00,0x00,0x00,0x58,0x00,0x6c,0x5a,0x71,0xba,0x96,0x33,0xf8,0xc7,
 /**
  * Function to send a frame
  */
-void send_msg(BYTE *buff, int buffSize) {
+static void send_msg(BYTE *buff, int buffSize) {
 	extern MAC_TRANS_PARAM MTP;
 	TxData = 0;
 
@@ -86,7 +105,7 @@ void send_msg(BYTE *buff, int buffSize) {
 /**
  * Helper funtion to decode a 0x01 event frame
  */
-void dexor(BYTE *buff, int buffSize)
+static void dexor(BYTE *buff, int buffSize)
 {
 	printf("XOR: ");
 	for (int i = 0; i < buffSize; i++) {
@@ -116,7 +135,7 @@ enum
 /**
  * Helper function to get the millisecond counter
  */
-time_t getMSTime()
+static time_t getMSTime()
 {
 	struct timespec monotime;
 	clock_gettime(CLOCK_MONOTONIC, &monotime);
@@ -128,18 +147,18 @@ time_t getMSTime()
 /**
  * Helper to get the weight
  */
-float getWeigth(BYTE rxPayload[], int weightEntry)
+static float getWeight(BYTE rxPayload[], int weightEntry)
 {
 	// get the weight
-	long rawWeigth =
+	long rawWeight =
 		(((long)rxPayload[26 + (weightEntry*4)])) |
 		(((long)rxPayload[27 + (weightEntry*4)])<<8) |
 		(((long)rxPayload[28 + (weightEntry*4)])<<16) |
 		(((long)rxPayload[29 + (weightEntry*4)])<<24);
 
-	float weigth=((float)rawWeigth)/100;
+	float weight=((float)rawWeight)/100;
 
-	return(weigth);
+	return(weight);
 }
 
 
@@ -195,6 +214,11 @@ int main(int argc, char **argv) {
 		}
 	}
 
+	// setup the pet list
+	TAILQ_HEAD(, pet_entry) petlist_head;
+
+	TAILQ_INIT(&petlist_head);
+
 	setup_spi();
 
 	// and setup the protocol
@@ -234,13 +258,63 @@ int main(int argc, char **argv) {
 		}
 		else
 		{
-			// The main loop
-			while (1) {
+			int lastHour = -1;
 
-				char topicName[100];
+			// The main loop
+			while (1)
+			{
+
+				struct tm localTime;
+
+				char topicName[200];
+
+				// perform periodic events
+				time_t currentTime = time(NULL);
+
+				localtime_r(&currentTime, &localTime);
+
+				// once a hour, do the reports
+				if (localTime.tm_hour!=lastHour)
+				{
+					struct pet_entry *item;
+
+					// find the entry
+					TAILQ_FOREACH(item, &petlist_head, entries)
+					{
+						char value[30];
+
+						// and reset daily stats
+						// we do this at the start to zero it
+						if (localTime.tm_hour==0)
+						{
+							item->totalDailyFeedingTime=0;
+							item->totalDailyEaten=0;
+						}
+
+						// start with the pet total feeding time
+						sprintf(topicName, "pet/%s/petTotalDailyFeedingTime", item->chipID);
+						sprintf(value, "%d", item->totalDailyFeedingTime);
+
+						mosquitto_publish(m, NULL, topicName,
+										strlen(value), value, 0, false);
+
+						// and total grams eaten
+						sprintf(topicName, "pet/%s/petTotalDailyEaten", item->chipID);
+						sprintf(value, "%f", item->totalDailyEaten);
+
+						mosquitto_publish(m, NULL, topicName,
+										strlen(value), value, 0, false);
+
+					}
+
+					// record that we have reported this hour
+					lastHour=localTime.tm_hour;
+				}
+
 
 				// check if a message is available, and if so process it
-				if (MiApp_MessageAvailable()) {
+				if (MiApp_MessageAvailable())
+				{
 
 					char srcAddr[20];
 					BYTE rxPayload[200];
@@ -281,19 +355,22 @@ int main(int argc, char **argv) {
 					int seqId = rxPayload[1];
 
 
-					sprintf(topicName, "petfeeder/%s/message", srcAddr);
+					// in debug mode, publish the petfeeder messages
+					if (debug)
+					{
+						sprintf(topicName, "petfeeder/%s/message", srcAddr);
 
-					char payloadTxt[400];
-					payloadTxt[0]=0;
-					for (int i = 0; i < rxPayloadSize; i++) {
-						char tmp[30];
-						sprintf(tmp, "%02x ", rxPayload[i]);
-						strcat(payloadTxt, tmp);
+						char payloadTxt[400];
+						payloadTxt[0]=0;
+						for (int i = 0; i < rxPayloadSize; i++) {
+							char tmp[30];
+							sprintf(tmp, "%02x ", rxPayload[i]);
+							strcat(payloadTxt, tmp);
+						}
+
+						res = mosquitto_publish(m, NULL, topicName,
+										strlen(payloadTxt), payloadTxt, 0, false);
 					}
-						
-					res = mosquitto_publish(m, NULL, topicName,
-									strlen(payloadTxt), payloadTxt, 0, false);
-									
 											
 					switch (currentState) {
 
@@ -334,6 +411,7 @@ int main(int argc, char **argv) {
 						// check if this is a beacon
 						if (msgType == 0x08 ) {
 
+							char value[30];
 							BYTE payload[] = { 0x0a, 0xb8, 0x6c };
 
 							// set the sequence ID
@@ -358,6 +436,13 @@ int main(int argc, char **argv) {
 								// no event data, so just stay in this state
 								currentState = STATE_WAITING_FOR_BEACON;
 							}
+
+							// currently this is a guess
+							sprintf(topicName, "petfeeder/%s/battery", srcAddr);
+							sprintf(value, "%d", rxPayload[3]);
+
+							mosquitto_publish(m, NULL, topicName,
+											strlen(value), value, 0, false);
 
 							// and send...
 							send_msg(payload, sizeof(payload));
@@ -458,6 +543,35 @@ int main(int argc, char **argv) {
 									printf("ChipID: %s\n", chipID);
 								}
 
+								struct pet_entry *petEntry = NULL;
+								struct pet_entry *item;
+
+								// find the entry
+								TAILQ_FOREACH(item, &petlist_head, entries)
+								{
+									if (strcmp(item->chipID, chipID)==0)
+									{
+										petEntry=item;
+									}
+								}
+
+								// if we did not find it
+								if (petEntry==NULL)
+								{
+									if (debug)
+									{
+										printf("Adding new pet %s\n", chipID);
+									}
+									petEntry = (struct pet_entry *)malloc(sizeof(struct pet_entry));
+									memset(petEntry,0x0, sizeof(struct pet_entry));
+									petEntry->chipID= strdup(chipID);
+									petEntry->totalDailyFeedingTime=0;
+									petEntry->totalDailyEaten=0;
+
+									TAILQ_INSERT_TAIL(&petlist_head, petEntry, entries);
+								}
+
+
 								// get the lid state
 								BYTE lidState = rxPayload[22];
 
@@ -477,6 +591,7 @@ int main(int argc, char **argv) {
 								const char *lidStateString ="";
 								const char *petFeedingStateString ="";
 								const char *userOpenStateString ="";
+								int petClosing=0;
 
 								switch(lidState)
 								{
@@ -490,6 +605,7 @@ int main(int argc, char **argv) {
 										lidStateString="false";
 										petFeedingStateString="false";
 										userOpenStateString="false";
+										petClosing=1;
 										break;
 
 									case 0x04:
@@ -554,6 +670,9 @@ int main(int argc, char **argv) {
 
 									res = mosquitto_publish(m, NULL, topicName,
 													strlen(value), value, 0, false);
+
+									// add the additional total feeding time..
+									petEntry->totalDailyFeedingTime+=openTime;
 								}
 
 								// send the user open state
@@ -565,27 +684,67 @@ int main(int argc, char **argv) {
 
 
 								// now do the food weight
+								enum weights
+								{
+									weight_leftOpen,
+									weight_leftClose,
+									weight_rightOpen,
+									weight_rightClose
+								};
+
 								const char *weightStrings[] = {"leftOpen", "leftClose", "rightOpen", "rightClose"};
+								float weights[4];
 
 								for (int weightEntry=0; weightEntry<4; weightEntry++)
 								{
 									char value[30];
 
-									float weigth = getWeigth(rxPayload, weightEntry);
+									float weight = getWeight(rxPayload, weightEntry);
 
-									// only publish if not zero for now
-									// on open, the value is zero for the "on close " weight
-									if (weigth != 0)
+									// only publish the closing weights if closing because
+									// a pet has eaten
+									if (petClosing)
 									{
-
 										sprintf(topicName, "petfeeder/%s/%s_weight", srcAddr, weightStrings[weightEntry]);
+										sprintf(value, "%f", weight);
 
-										sprintf(value, "%f", weigth);
-
-										res = mosquitto_publish(m, NULL, topicName,
+										mosquitto_publish(m, NULL, topicName,
 														strlen(value), value, 0, false);
-
 									}
+
+									weights[weightEntry]=weight;
+								}
+
+								// if closing because pet closing...
+								if (petClosing)
+								{
+									char value[30];
+
+									// calculate the total left
+									float totalLeft = weights[weight_rightClose] + weights[weight_leftClose];
+
+									sprintf(topicName, "petfeeder/%s/weight", srcAddr);
+									sprintf(value, "%f", totalLeft);
+
+									mosquitto_publish(m, NULL, topicName,
+													strlen(value), value, 0, false);
+
+
+									// we want to calculate the total eaten
+
+									float totalEaten = (weights[weight_leftOpen] - weights[weight_leftClose]) +
+											(weights[weight_rightOpen] - weights[weight_rightClose]);
+
+									// and publish it
+									sprintf(topicName, "pet/%s/eaten", chipID);
+									sprintf(value, "%f", totalEaten);
+
+									mosquitto_publish(m, NULL, topicName,
+													strlen(value), value, 0, false);
+
+									// and keep the running total daily
+									petEntry->totalDailyEaten+=totalEaten;
+
 								}
 
 							}
