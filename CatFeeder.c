@@ -283,14 +283,6 @@ int main(int argc, char **argv) {
 					{
 						char value[30];
 
-						// and reset daily stats
-						// we do this at the start to zero it
-						if (localTime.tm_hour==0)
-						{
-							item->totalDailyFeedingTime=0;
-							item->totalDailyEaten=0;
-						}
-
 						// start with the pet total feeding time
 						sprintf(topicName, "pet/%s/petTotalDailyFeedingTime", item->chipID);
 						sprintf(value, "%d", item->totalDailyFeedingTime);
@@ -305,6 +297,16 @@ int main(int argc, char **argv) {
 						mosquitto_publish(m, NULL, topicName,
 										strlen(value), value, 0, false);
 
+
+						// and reset daily stats
+						// we do this at the end so that the midnight reading
+						// is the last. The next reading will be around 1'ish
+						// and will be the new value
+						if (localTime.tm_hour==0)
+						{
+							item->totalDailyFeedingTime=0;
+							item->totalDailyEaten=0;
+						}
 					}
 
 					// record that we have reported this hour
@@ -588,49 +590,53 @@ int main(int argc, char **argv) {
 								// 05 User triggered - Close
 								// 06 zeroed when user opened
 
-								const char *lidStateString ="";
-								const char *petFeedingStateString ="";
-								const char *userOpenStateString ="";
+								const char *lidStateString ="false";
+								const char *petFeedingStateString ="false";
+								const char *userOpenStateString ="false";
 								int petClosing=0;
+								int closing=0;
+
 
 								switch(lidState)
 								{
+									// 00 Tag triggered - closed to Open
 									case 0x00:
 										lidStateString="true";
 										petFeedingStateString="true";
-										userOpenStateString="false";
 										break;
 
+									// 01 Tag triggered - open to closed
 									case 0x01:
-										lidStateString="false";
-										petFeedingStateString="false";
-										userOpenStateString="false";
 										petClosing=1;
+										closing=1;
 										break;
 
+									// 04 User triggered - Open
 									case 0x04:
 										lidStateString="true";
-										petFeedingStateString="false";
 										userOpenStateString="true";
 										break;
 
+									// 05 User triggered - Close
 									case 0x05:
-										lidStateString="false";
-										petFeedingStateString="false";
-										userOpenStateString="false";
+										closing=1;
 										break;
 
+									// 06 zeroed when user opened
+									// this gets sent while its open once
+									// the user presses the close button
+									// it also then sends a 0x05 to state that
+									// its now closed.
 									case 0x06:
-										lidStateString="false";
-										petFeedingStateString="false";
-										userOpenStateString="true"; // TODO: check???
-										break;
-
-									default:
-										// by default assume all closed
-										lidStateString="false";
-										petFeedingStateString="false";
-										userOpenStateString="false";
+										// the lid is still considered open because user
+										// opened it
+										lidStateString="true";
+										userOpenStateString="true";
+										// ok, it has been zero'ed,
+										// this this time we dont need to do anything here
+										// but if we start using the leftOpen and rightOpen for something
+										// it will need to be reset here. currently this is only used
+										// for animal open, so not currently an issue
 										break;
 								}
 
@@ -640,40 +646,10 @@ int main(int argc, char **argv) {
 								}
 
 								// send the lid state
-								sprintf(topicName, "petfeeder/%s/lidState", srcAddr);
+								sprintf(topicName, "petfeeder/%s/lidOpen", srcAddr);
 
 								res = mosquitto_publish(m, NULL, topicName,
 												strlen(lidStateString), lidStateString, 0, false);
-
-								// send the pet feeding state
-								sprintf(topicName, "petfeeder/%s/petFeeding", srcAddr);
-
-								res = mosquitto_publish(m, NULL, topicName,
-												strlen(petFeedingStateString), petFeedingStateString, 0, false);
-
-								// TODO: when there are multiple feeders, it would be nice to have
-								// individual pet states here. one way to do this is to publish another
-								// state for individual pets
-								sprintf(topicName, "pet/%s/petFeeding", chipID);
-
-								res = mosquitto_publish(m, NULL, topicName,
-												strlen(petFeedingStateString), petFeedingStateString, 0, false);
-
-								// if we have an open time
-								if (openTime>0)
-								{
-									char value[30];
-
-									sprintf(topicName, "pet/%s/petFeedingTime", chipID);
-
-									sprintf(value, "%d", openTime);
-
-									res = mosquitto_publish(m, NULL, topicName,
-													strlen(value), value, 0, false);
-
-									// add the additional total feeding time..
-									petEntry->totalDailyFeedingTime+=openTime;
-								}
 
 								// send the user open state
 								sprintf(topicName, "petfeeder/%s/userOpen", srcAddr);
@@ -681,6 +657,12 @@ int main(int argc, char **argv) {
 								res = mosquitto_publish(m, NULL, topicName,
 												strlen(userOpenStateString), userOpenStateString, 0, false);
 
+
+								// send the pet feeding state
+								sprintf(topicName, "pet/%s/petFeeding", chipID);
+
+								res = mosquitto_publish(m, NULL, topicName,
+												strlen(petFeedingStateString), petFeedingStateString, 0, false);
 
 
 								// now do the food weight
@@ -701,9 +683,10 @@ int main(int argc, char **argv) {
 
 									float weight = getWeight(rxPayload, weightEntry);
 
-									// only publish the closing weights if closing because
-									// a pet has eaten
-									if (petClosing)
+									// only publish the weights if closing because of user or pet.
+									// this is because the closing weight is only available on the
+									// closing message
+									if (closing)
 									{
 										sprintf(topicName, "petfeeder/%s/%s_weight", srcAddr, weightStrings[weightEntry]);
 										sprintf(value, "%f", weight);
@@ -715,8 +698,9 @@ int main(int argc, char **argv) {
 									weights[weightEntry]=weight;
 								}
 
-								// if closing because pet closing...
-								if (petClosing)
+								// if closing because of user or pet,
+								// make sure we publish a total amount left
+								if (closing)
 								{
 									char value[30];
 
@@ -728,10 +712,24 @@ int main(int argc, char **argv) {
 
 									mosquitto_publish(m, NULL, topicName,
 													strlen(value), value, 0, false);
+								}
 
+								// if closing because pet closing...
+								if (petClosing)
+								{
+									char value[30];
 
-									// we want to calculate the total eaten
+									// also publish the amount of time this pet was feeding
+									sprintf(topicName, "pet/%s/petFeedingTime", chipID);
+									sprintf(value, "%d", openTime);
 
+									res = mosquitto_publish(m, NULL, topicName,
+													strlen(value), value, 0, false);
+
+									// add the additional total feeding time..
+									petEntry->totalDailyFeedingTime+=openTime;
+
+									// we want to calculate the total eaten by this pet
 									float totalEaten = (weights[weight_leftOpen] - weights[weight_leftClose]) +
 											(weights[weight_rightOpen] - weights[weight_rightClose]);
 
@@ -744,9 +742,7 @@ int main(int argc, char **argv) {
 
 									// and keep the running total daily
 									petEntry->totalDailyEaten+=totalEaten;
-
 								}
-
 							}
 
 							// send the ACK
