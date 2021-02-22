@@ -22,35 +22,18 @@
  * SOFTWARE.
 */
 
-#ifndef INC_SYSTEMPROFILE_H_
-#define INC_SYSTEMPROFILE_H_
-
-
-#ifndef __CATFEEDER__
-#define __CATFEEDER__
-#endif
-
-#include "GenericTypeDefs.h"
-
-#ifndef MRF24J40
-#define MRF24J40
-#endif
-
-// 11 + 8  + 8 + 12
-// 91
-#define RX_BUFFER_SIZE 70
-
-
-#define INPUT
-
-int RFIF_PIN();
-void PHY_RESETn_LOW();
-void PHY_RESETn_HIGH();
-void PHYSetShortRAMAddr(INPUT BYTE address, INPUT BYTE value);
-BYTE PHYGetShortRAMAddr(INPUT BYTE address);
-BYTE PHYGetLongRAMAddr(INPUT WORD address);
-void PHYSetLongRAMAddr(INPUT WORD address, INPUT BYTE value);
+#ifndef INC_COMPILER_H_
+#define INC_COMPILER_H_
 
 
 
-#endif /* INC_SYSTEMPROFILE_H_ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+#define	ROM	const
+
+
+
+#endif /* INC_COMPILER_H_ */

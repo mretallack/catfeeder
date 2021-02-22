@@ -375,24 +375,19 @@ HANDLE_DATA_PACKET:
                                 MiWiStateMachine.bits.DataRequesting = 0;                                break;
                             }
                         #endif
-                        
-                        //if( MACRxPacket.PayloadLen < 10 )
-                        {
-                        	if (MACRxPacket.PayloadLen>0)
-                        	{
-								//This data is for the user, pass it up to them
-								rxMessage.PayloadSize = MACRxPacket.PayloadLen;
-								rxMessage.Payload = MACRxPacket.Payload;
 
-								MiWiStateMachine.bits.RxHasUserData = 1;
+#ifdef __CATFEEDER__
+                        if (MACRxPacket.PayloadLen>0)
+						{
+							//This data is for the user, pass it up to them
+							rxMessage.PayloadSize = MACRxPacket.PayloadLen;
+							rxMessage.Payload = MACRxPacket.Payload;
 
+							MiWiStateMachine.bits.RxHasUserData = 1;
+						}
 
-                        	}
+#else // __CATFEEDER__
 
-                        	// for exit and dont run the rest of the code
-                            break;
-                        }
-                        
                         // Load the source and destination address information.
                         destPANID.v[0] = MACRxPacket.Payload[2];
                         destPANID.v[1] = MACRxPacket.Payload[3];
@@ -1108,6 +1103,7 @@ ThisPacketIsForMe:
                             #endif    
                         }
     
+#endif // __CATFEEDER__
                     }
                     break;
     

@@ -113,7 +113,7 @@ void InitSymbolTimer()
 #elif defined(__STM32F10X__)
     SYMBOL_TIMER_INIT();
 #elif defined(__CATFEEDER__)
-    SYMBOL_TIMER_INIT();
+    // Nothing to do here.
 #else
     #error "Symbol timer implementation required for stack usage."
 #endif

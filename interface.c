@@ -201,22 +201,6 @@ void PHY_RESETn_HIGH()
 
 
 /**
- * Stub functions
- */
-void RFIF_SET()
-{
-
-}
-
-/**
- * Stub functions
- */
-void RFIF_CLEAR()
-{
-
-}
-
-/**
  * Funtion to action any interrupt that has happened
  */
 int RFIF_PIN()
@@ -285,13 +269,6 @@ BYTE PHYGetLongRAMAddr(WORD address)
 	return(buffer[2]);
 }
 
-/**
- * Stub function
- */
-void SYMBOL_TIMER_INIT()
-{
-
-}
 
 /**
  * Stub function to setup console

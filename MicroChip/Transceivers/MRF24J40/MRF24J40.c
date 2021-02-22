@@ -310,20 +310,12 @@
         BYTE i;
         WORD j;
         
-        // first perform a hardware reset
-	//#if defined(__STM32F10X__)
 		PHY_RESETn_LOW();
-	//#else
-    //    PHY_RESETn = 0;
-	//#endif
+
 		usleep(300*1000);
     
-	//#if defined(__STM32F10X__)
 		PHY_RESETn_HIGH();
-	//#else
-    //    PHY_RESETn = 1;
-	//#endif
-//for(j = 0; j < (WORD)300000; j++){}
+
 		usleep(300*1000);
       
         /* do a soft reset */
@@ -484,18 +476,8 @@
     {   
         BYTE i;
         
-        //set the interrupt flag just in case the interrupt was missed
-	//#if defined(__STM32F10X__)
-		if (RFIF_PIN() == 0)
-		{
-			RFIF_SET();
-		}
-	//#else
-       //if(RF_INT_PIN == 0)
-     //   {
-     //       RFIF = 1;
-       // }
-	//#endif
+		RFIF_PIN();
+
         //If the stack TX has been busy for a long time then
         //time out the TX because we may have missed the interrupt 
         //and don't want to lock up the stack forever
@@ -1116,16 +1098,8 @@
             while(1)
             {
 			//#if defined(__STM32F10X__)
-				if (RFIF_PIN() == 0)
-				{
-					RFIF_SET();
-				}
-			//#else
-		//		if(RF_INT_PIN == 0)
-		//		{
-		//			RFIF = 1;
-	//			}
-	//		#endif
+				RFIF_PIN();
+
                 if ( MRF24J40Status.bits.TX_BUSY == 0 )
                 {
                     if( MRF24J40Status.bits.TX_FAIL )
@@ -1674,14 +1648,7 @@
         {  
             BYTE i;
             BYTE j;
-              
-            //clear the interrupt flag as soon as possible such that another interrupt can
-            //occur quickly.
-		//#if defined(__STM32F10X__)
-			RFIF_CLEAR();
-		//#else
-          //  RFIF = 0;
-		//#endif
+
 
             //create a new scope for the MRF24J40 interrupts so that we can clear the interrupt
             //flag quickly and then handle the interrupt that we have already received

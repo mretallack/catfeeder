@@ -188,9 +188,9 @@
     #define SYMBOLS_TO_TICKS(a)	(INSTR_FREQ * a / SYMBOL_TO_TICK_RATE)
     // #define TICKS_TO_SYMBOLS(a) (((DWORD)SYMBOL_TO_TICK_RATE / 100000) * a / ((DWORD)CLOCK_FREQ/100000))
 #elif defined(__CATFEEDER__)
-#warning "TODO"
-	#define INSTR_FREQ					100000
-   #define SYMBOL_TO_TICK_RATE		(100000ul / 10000ul)
+
+	#define INSTR_FREQ					1000
+   #define SYMBOL_TO_TICK_RATE		(10000ul / 1000ul)
 
     #define ONE_SECOND 			(1000)
     /* SYMBOLS_TO_TICKS to only be used with input (a) as a constant, otherwise you will blow up the code */
