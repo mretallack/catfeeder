@@ -68,17 +68,17 @@ The application can be added to supervisord (http://supervisord.org/) to allow i
 | petfeeder/[deviceMAC]/rightClose_weight  | Float | Weight of food in the right tray in grams on closing |
 | petfeeder/[deviceMAC]/weight   | Float | Total Weight of food in both trays on closing |
 | pet/[petChipID]/petFeeding | Boolean | true if the pet opened the lid |
-| pet/[petChipID]/petFeedingTime | seconds | The amount of time the pet was feeding for in this session |
+| pet/[petChipID]/petFeedingTime | Integer | The amount of time (in seconds) the pet was feeding for in this session |
 | pet/[petChipID]/eaten | Float | The amount of food eaten in by this pet in this session |
-| pet/[petChipID]/petTotalDailyEaten | Seconds | The total daily amount of time the pet was feeding, reset at midnight |
-| pet/[petChipID]/petTotalDailyFeedingTime | The total daily amount of food (in grams) the pet has eaten, reset at midnight |
+| pet/[petChipID]/petTotalDailyEaten | Float | The total daily amount of food (in grams) the pet has eaten, reset at midnight |
+| pet/[petChipID]/petTotalDailyFeedingTime | Integer | The total daily amount of time (in seconds) the pet was feeding, reset at midnight  |
 
-deviceMAC: The MAC address of the device
-petChipID: The Pets Chip ID
+* deviceMAC: The MAC address of the device
+* petChipID: The Pets Chip ID
 
 # Protocol information
 
-The SurePet feeder protocol is based on MiWi, this is a protocol made by Microchip. SurePet have changed a few MiWi fields to make it incompatible, for example the  
+The SurePet feeder protocol is based on MiWi, this is a protocol made by Microchip. SurePet have changed a few MiWi fields to make it incompatible, for example the Protocol ID has been changed from 0x4D to 0x7E. 
 
 
 # TODO
