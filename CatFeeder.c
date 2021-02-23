@@ -29,9 +29,11 @@
 #include <errno.h>
 #include <sys/queue.h>
 
-#include "WirelessProtocols/MCHP_API.h"
+#include <cjson/cJSON.h>
 
 #include <mosquitto.h>
+
+#include "WirelessProtocols/MCHP_API.h"
 
 #include "interface.h"
 
@@ -58,6 +60,10 @@ struct pet_entry {
     TAILQ_ENTRY(pet_entry) entries;
 };
 
+/** 
+ * The list of detected pets
+ */
+static TAILQ_HEAD(, pet_entry) petlist_head;
 
 /**
  * Define the key used to encode the 0x01 messages
@@ -163,12 +169,127 @@ static float getWeight(BYTE rxPayload[], int weightEntry)
 
 
 /**
+ * Function to save state
+ */
+static void save_state(const char *stateFile)
+{
+	FILE *fp;
+	cJSON *root, *pets;
+	struct pet_entry *item;
+	
+	root  = cJSON_CreateObject();
+	
+	pets = cJSON_CreateArray();
+	
+	cJSON_AddItemToObject(root, "pets", pets);
+
+	// add items to the pets array
+	TAILQ_FOREACH(item, &petlist_head, entries)
+	{
+		cJSON *pet;
+		cJSON_AddItemToArray(pets, pet  = cJSON_CreateObject());
+		
+		cJSON_AddItemToObject(pet, "chipID", cJSON_CreateString(item->chipID));
+		cJSON_AddItemToObject(pet, "totalDailyFeedingTime", cJSON_CreateNumber(item->totalDailyFeedingTime));
+		cJSON_AddItemToObject(pet, "totalDailyEaten", cJSON_CreateNumber(item->totalDailyEaten));
+		
+	}
+
+	
+	fp = fopen(stateFile, "w+");
+
+	if (fp == NULL)
+	{
+		fprintf( stderr, "Failed to write to state file, %s\n", strerror(errno));
+	}
+	else 
+	{
+		char *out;
+		out = cJSON_Print(root); 
+		fputs(out, fp);
+		free(out);
+  
+		fclose(fp);	
+	}
+	
+	cJSON_Delete(root);
+}
+
+
+/**
+ * Function to save state
+ */
+static void load_state(const char *stateFile)
+{
+	FILE *fp;
+	
+	fp = fopen(stateFile, "r");
+	if (fp==NULL)
+	{
+		printf("Cannot open state file %s, %s\n", stateFile, strerror(errno));
+	}
+	else
+	{
+		long lSize;
+		char *buffer;
+		cJSON *root;
+		
+		// find the size of the file
+		fseek(fp, 0, SEEK_END);
+		lSize = ftell(fp);
+		rewind(fp);
+	
+		buffer = (char *)malloc(sizeof(char)*lSize + 1);
+		
+		memset(buffer, 0, sizeof(char)*lSize + 1);
+		fread(buffer, sizeof(char), lSize, fp);
+		
+		root = cJSON_Parse(buffer);
+		
+		if (root==NULL)
+		{
+			printf("Failed to Parse state file\n");
+		}
+		else
+		{
+			// look for the pets array
+			struct pet_entry *petEntry = NULL;
+			int i;
+
+			cJSON *pets = cJSON_GetObjectItem(root,"pets");
+			for (i = 0 ; i < cJSON_GetArraySize(pets) ; i++)
+			{
+				cJSON *pet = cJSON_GetArrayItem(pets, i);
+				
+				petEntry = (struct pet_entry *)malloc(sizeof(struct pet_entry));
+				memset(petEntry,0x0, sizeof(struct pet_entry));
+				
+				petEntry->chipID= cJSON_GetObjectItem(pet, "chipID")->valuestring;
+				
+				petEntry->totalDailyFeedingTime=cJSON_GetObjectItem(pet, "totalDailyFeedingTime")->valueint;
+				petEntry->totalDailyEaten=cJSON_GetObjectItem(pet, "totalDailyEaten")->valueint;
+
+				TAILQ_INSERT_TAIL(&petlist_head, petEntry, entries);
+			}
+		
+			cJSON_Delete(root);
+		}
+		
+		fclose(fp);	
+
+	}
+	
+}
+
+
+/**
  * Main entry point
  */
 int main(int argc, char **argv) {
 
 	//const char *clientID = "catfeeder";
 	const char *brokerName ="127.0.0.1";
+	const char *stateFile ="/var/run/catfeeder/state.json";
 	int brokerPort = 1883;
 	int keepAlive = 60;
 	int verbose = 0;
@@ -187,7 +308,7 @@ int main(int argc, char **argv) {
 
 	opterr = 0;
 
-	while ((c = getopt (argc, argv, "dvh:p:k:")) != -1)
+	while ((c = getopt (argc, argv, "dvh:p:k:s:")) != -1)
 	{
 		switch (c)
 		{
@@ -201,11 +322,12 @@ int main(int argc, char **argv) {
 			case 'h':
 				brokerName = optarg;
 				break;
-
+			case 's':
+				stateFile = optarg;
+				break;
 			case 'p':
 				brokerPort = atoi(optarg);
 				break;
-
 			case 'k':
 				keepAlive = atoi(optarg);
 				break;
@@ -215,9 +337,11 @@ int main(int argc, char **argv) {
 	}
 
 	// setup the pet list
-	TAILQ_HEAD(, pet_entry) petlist_head;
 
 	TAILQ_INIT(&petlist_head);
+
+	// load in the state
+	load_state(stateFile);
 
 	setup_spi();
 
@@ -263,7 +387,7 @@ int main(int argc, char **argv) {
 			// The main loop
 			while (1)
 			{
-
+				int stateUpdated = 0;
 				struct tm localTime;
 
 				char topicName[200];
@@ -306,6 +430,7 @@ int main(int argc, char **argv) {
 						{
 							item->totalDailyFeedingTime=0;
 							item->totalDailyEaten=0;
+							stateUpdated=1;
 						}
 					}
 
@@ -571,6 +696,7 @@ int main(int argc, char **argv) {
 									petEntry->totalDailyEaten=0;
 
 									TAILQ_INSERT_TAIL(&petlist_head, petEntry, entries);
+									
 								}
 
 
@@ -743,6 +869,9 @@ int main(int argc, char **argv) {
 									// and keep the running total daily
 									petEntry->totalDailyEaten+=totalEaten;
 								}
+								
+								
+								stateUpdated=1;
 							}
 
 							// send the ACK
@@ -786,6 +915,16 @@ int main(int argc, char **argv) {
 						break;
 
 					}
+				}
+				
+				
+				if (stateUpdated)
+				{
+					if (verbose)
+					{
+						printf("Saving state data to %s\n", stateFile);
+					}
+					save_state(stateFile);
 				}
 			}
 		}

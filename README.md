@@ -35,6 +35,7 @@ The following additional packages need to be installed onto the Pi:
 * libmosquitto-dev
 * libmosquitto1
 * wiringpi
+* libcjson-dev
 
 Then the SPI needs to be enabled using the raspi-config command. 
 
@@ -86,4 +87,4 @@ The SurePet feeder protocol is based on MiWi, this is a protocol made by Microch
 * More daily stats
 * Handle multiple feeders/doors 
 * Battery state, could be byte 3 in the beacon
-* Save the pet data to disk and load on startup
+
