@@ -264,10 +264,18 @@ static void load_state(const char *stateFile)
 				petEntry = (struct pet_entry *)malloc(sizeof(struct pet_entry));
 				memset(petEntry,0x0, sizeof(struct pet_entry));
 				
-				petEntry->chipID= cJSON_GetObjectItem(pet, "chipID")->valuestring;
+				petEntry->chipID= strdup(cJSON_GetObjectItem(pet, "chipID")->valuestring);
 				
-				petEntry->totalDailyFeedingTime=cJSON_GetObjectItem(pet, "totalDailyFeedingTime")->valueint;
-				petEntry->totalDailyEaten=cJSON_GetObjectItem(pet, "totalDailyEaten")->valueint;
+				petEntry->totalDailyFeedingTime=(int)cJSON_GetObjectItem(pet, "totalDailyFeedingTime")->valueint;
+				petEntry->totalDailyEaten=(float)cJSON_GetObjectItem(pet, "totalDailyEaten")->valuedouble;
+
+				if (debug)
+				{
+					printf("Loading Pet %s, totalDailyFeedingTime=%d, totalDailyEaten=%f\n",
+							petEntry->chipID,
+							petEntry->totalDailyFeedingTime,
+							petEntry->totalDailyEaten );
+				}
 
 				TAILQ_INSERT_TAIL(&petlist_head, petEntry, entries);
 			}
