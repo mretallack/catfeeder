@@ -44,6 +44,8 @@ Then the SPI needs to be enabled using the raspi-config command.
 1. Select "SPI"
 1. Select "Yes" to enable SPI
 
+By default, the application stores persistent state data into */var/run/catfeeder/state.json*. This means that the */var/run/catfeeder* directory needs to be created and writable by the application. 
+
 # Usage
 
 To start, type:
