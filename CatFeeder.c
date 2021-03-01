@@ -176,6 +176,7 @@ static void save_state(const char *stateFile)
 	FILE *fp;
 	cJSON *root, *pets;
 	struct pet_entry *item;
+	char * tmpName = (char *)malloc(strlen(stateFile)+10);
 	
 	root  = cJSON_CreateObject();
 	
@@ -195,24 +196,42 @@ static void save_state(const char *stateFile)
 		
 	}
 
+	// create new tmp name
+	sprintf(tmpName, "%s.new", stateFile);
 	
-	fp = fopen(stateFile, "w+");
+	fp = fopen(tmpName, "w+");
 
 	if (fp == NULL)
 	{
-		fprintf( stderr, "Failed to write to state file, %s\n", strerror(errno));
+		fprintf( stderr, "Failed to open state file, %s\n",
+				strerror(errno));
 	}
 	else 
 	{
+		int success;
+
 		char *out;
 		out = cJSON_Print(root); 
-		fputs(out, fp);
+		success = fputs(out, fp);
+
+		if (success<=0)
+		{
+			fprintf( stderr, "Failed to write to state file, %s\n",
+					strerror(errno));
+		}
+
 		free(out);
   
 		fclose(fp);	
+
+		if (success>0)
+		{
+			// and we have created file file ok, so rename it
+			rename(tmpName,stateFile);
+		}
 	}
-	
 	cJSON_Delete(root);
+	free(tmpName);
 }
 
 
@@ -413,32 +432,33 @@ int main(int argc, char **argv) {
 					// find the entry
 					TAILQ_FOREACH(item, &petlist_head, entries)
 					{
-						char value[30];
-
-						// start with the pet total feeding time
-						sprintf(topicName, "pet/%s/petTotalDailyFeedingTime", item->chipID);
-						sprintf(value, "%d", item->totalDailyFeedingTime);
-
-						mosquitto_publish(m, NULL, topicName,
-										strlen(value), value, 0, false);
-
-						// and total grams eaten
-						sprintf(topicName, "pet/%s/petTotalDailyEaten", item->chipID);
-						sprintf(value, "%f", item->totalDailyEaten);
-
-						mosquitto_publish(m, NULL, topicName,
-										strlen(value), value, 0, false);
-
-
 						// and reset daily stats
 						// we do this at the end so that the midnight reading
 						// is the last. The next reading will be around 1'ish
 						// and will be the new value
 						if (localTime.tm_hour==0)
 						{
+							char value[30];
+
+							// reset these stats
 							item->totalDailyFeedingTime=0;
 							item->totalDailyEaten=0;
 							stateUpdated=1;
+
+							// the totals have also changed, so re-publish
+							// start with the pet total feeding time
+							sprintf(topicName, "pet/%s/petTotalDailyFeedingTime", item->chipID);
+							sprintf(value, "%d", item->totalDailyFeedingTime);
+
+							mosquitto_publish(m, NULL, topicName,
+											strlen(value), value, 0, false);
+
+							// and total grams eaten
+							sprintf(topicName, "pet/%s/petTotalDailyEaten", item->chipID);
+							sprintf(value, "%f", item->totalDailyEaten);
+
+							mosquitto_publish(m, NULL, topicName,
+											strlen(value), value, 0, false);
 						}
 					}
 
@@ -876,8 +896,23 @@ int main(int argc, char **argv) {
 
 									// and keep the running total daily
 									petEntry->totalDailyEaten+=totalEaten;
+
+									// the totals have also changed, so re-publish
+									// start with the pet total feeding time
+									sprintf(topicName, "pet/%s/petTotalDailyFeedingTime", item->chipID);
+									sprintf(value, "%d", item->totalDailyFeedingTime);
+
+									mosquitto_publish(m, NULL, topicName,
+													strlen(value), value, 0, false);
+
+									// and total grams eaten
+									sprintf(topicName, "pet/%s/petTotalDailyEaten", item->chipID);
+									sprintf(value, "%f", item->totalDailyEaten);
+
+									mosquitto_publish(m, NULL, topicName,
+													strlen(value), value, 0, false);
+
 								}
-								
 								
 								stateUpdated=1;
 							}
