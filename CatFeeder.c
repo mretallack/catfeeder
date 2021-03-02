@@ -308,6 +308,29 @@ static void load_state(const char *stateFile)
 	
 }
 
+/**
+ * Function to send daily update for a specific pet
+ */
+void sendDailyUpdate(struct mosquitto *m, struct pet_entry *item)
+{
+	char topicName[200];
+	char value[30];
+
+	// the totals have also changed, so re-publish
+	// start with the pet total feeding time
+	sprintf(topicName, "pet/%s/petTotalDailyFeedingTime", item->chipID);
+	sprintf(value, "%d", item->totalDailyFeedingTime);
+
+	mosquitto_publish(m, NULL, topicName,
+					strlen(value), value, 0, false);
+
+	// and total grams eaten
+	sprintf(topicName, "pet/%s/petTotalDailyEaten", item->chipID);
+	sprintf(value, "%f", item->totalDailyEaten);
+
+	mosquitto_publish(m, NULL, topicName,
+					strlen(value), value, 0, false);
+}
 
 /**
  * Main entry point
@@ -438,27 +461,14 @@ int main(int argc, char **argv) {
 						// and will be the new value
 						if (localTime.tm_hour==0)
 						{
-							char value[30];
 
 							// reset these stats
 							item->totalDailyFeedingTime=0;
 							item->totalDailyEaten=0;
 							stateUpdated=1;
 
-							// the totals have also changed, so re-publish
-							// start with the pet total feeding time
-							sprintf(topicName, "pet/%s/petTotalDailyFeedingTime", item->chipID);
-							sprintf(value, "%d", item->totalDailyFeedingTime);
-
-							mosquitto_publish(m, NULL, topicName,
-											strlen(value), value, 0, false);
-
-							// and total grams eaten
-							sprintf(topicName, "pet/%s/petTotalDailyEaten", item->chipID);
-							sprintf(value, "%f", item->totalDailyEaten);
-
-							mosquitto_publish(m, NULL, topicName,
-											strlen(value), value, 0, false);
+							// and send the updated values
+							sendDailyUpdate(m, item);
 						}
 					}
 
@@ -899,18 +909,7 @@ int main(int argc, char **argv) {
 
 									// the totals have also changed, so re-publish
 									// start with the pet total feeding time
-									sprintf(topicName, "pet/%s/petTotalDailyFeedingTime", item->chipID);
-									sprintf(value, "%d", item->totalDailyFeedingTime);
-
-									mosquitto_publish(m, NULL, topicName,
-													strlen(value), value, 0, false);
-
-									// and total grams eaten
-									sprintf(topicName, "pet/%s/petTotalDailyEaten", item->chipID);
-									sprintf(value, "%f", item->totalDailyEaten);
-
-									mosquitto_publish(m, NULL, topicName,
-													strlen(value), value, 0, false);
+									sendDailyUpdate(petEntry);
 
 								}
 								
