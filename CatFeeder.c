@@ -909,7 +909,22 @@ int main(int argc, char **argv) {
 
 									// the totals have also changed, so re-publish
 									// start with the pet total feeding time
+<<<<<<< HEAD
 									sendDailyUpdate(petEntry);
+=======
+									sprintf(topicName, "pet/%s/petTotalDailyFeedingTime", chipID);
+									sprintf(value, "%d", petEntry->totalDailyFeedingTime);
+
+									mosquitto_publish(m, NULL, topicName,
+													strlen(value), value, 0, false);
+
+									// and total grams eaten
+									sprintf(topicName, "pet/%s/petTotalDailyEaten", chipID);
+									sprintf(value, "%f", petEntry->totalDailyEaten);
+
+									mosquitto_publish(m, NULL, topicName,
+													strlen(value), value, 0, false);
+>>>>>>> 12e8c7ee53c17b865fda573eae88d2af719a54bf
 
 								}
 								
