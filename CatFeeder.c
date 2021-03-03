@@ -339,7 +339,7 @@ int main(int argc, char **argv) {
 
 	//const char *clientID = "catfeeder";
 	const char *brokerName ="127.0.0.1";
-	const char *stateFile ="/var/run/catfeeder/state.json";
+	const char *stateFile ="/var/lib/catfeeder/state.json";
 	int brokerPort = 1883;
 	int keepAlive = 60;
 	int verbose = 0;
