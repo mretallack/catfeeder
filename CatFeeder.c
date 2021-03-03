@@ -224,6 +224,9 @@ static void save_state(const char *stateFile)
   
 		fclose(fp);	
 
+		// make sure we sync any file writes
+		sync();
+
 		if (success>0)
 		{
 			// and we have created file file ok, so rename it
