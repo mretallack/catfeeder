@@ -11,7 +11,11 @@ and reported voltage is 5.254,
 
 From my feeder, measuring the battery voltage:
 
-5.96v = 193
+| Voltage | Reading |
+| --------|-------- |
+| 5.96v   |   193   |
+| 5.85v   |   189   |
+
 
 # Predicting
 
