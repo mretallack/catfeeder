@@ -653,10 +653,8 @@ int main(int argc, char **argv) {
 								res = mosquitto_publish(m, NULL, topicName,
 												strlen(payloadTxt), payloadTxt, 0, false);
 												
-								printf("Message Event Data Length %d\n", msgEventDataLength);
-							
 							}
-
+							
 							int msgEventDataLength=rxPayload[4];
 							
 							// this may be a multipacket frame, offset 6 defines
