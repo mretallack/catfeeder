@@ -15,6 +15,8 @@ From my feeder, measuring the battery voltage:
 | --------|-------- |
 | 5.96v   |   193   |
 | 5.85v   |   189   |
+| 5.77v   |   187   |
+
 
 
 # Predicting
