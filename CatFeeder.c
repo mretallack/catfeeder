@@ -153,10 +153,10 @@ static float getWeight(BYTE rxPayload[], int weightEntry)
 {
 	// get the weight
 	long rawWeight =
-		(((long)rxPayload[26 + (weightEntry*4)])) |
-		(((long)rxPayload[27 + (weightEntry*4)])<<8) |
-		(((long)rxPayload[28 + (weightEntry*4)])<<16) |
-		(((long)rxPayload[29 + (weightEntry*4)])<<24);
+		(((long)rxPayload[26-6 + (weightEntry*4)])) |
+		(((long)rxPayload[27-6 + (weightEntry*4)])<<8) |
+		(((long)rxPayload[28-6 + (weightEntry*4)])<<16) |
+		(((long)rxPayload[29-6 + (weightEntry*4)])<<24);
 
 	float weight=((float)rawWeight)/100;
 
@@ -637,286 +637,324 @@ int main(int argc, char **argv) {
 
 							if (debug)
 							{
-								printf("RXDECODE: ");
+							
+								char payloadTxt[400];
+								payloadTxt[0]=0;
 								for (int i = 0; i < rxPayloadSize; i++) {
-									printf("%02x ", rxPayload[i]);
+									char tmp[30];
+									sprintf(tmp, "%02x ", rxPayload[i]);
+									strcat(payloadTxt, tmp);
 								}
-								printf("\n");
+								
+								printf("RXDECODE: %s\n", payloadTxt);
+								sprintf(topicName, "petfeeder/%s//decodedmessage", 
+											srcAddr );
+								
+								res = mosquitto_publish(m, NULL, topicName,
+												strlen(payloadTxt), payloadTxt, 0, false);
+												
+								printf("Message Event Data Length %d\n", msgEventDataLength);
+							
 							}
 
 							int msgEventDataLength=rxPayload[4];
 							
-							int msgSubTypeLength=rxPayload[6];
-							int msgSubType=rxPayload[7];
-
-							if (verbose)
+							// this may be a multipacket frame, offset 6 defines
+							// the size of the first packet
+							BYTE *packetStart = &rxPayload[6];
+							
+							// subtract the header
+							msgEventDataLength-=6;
+							
+							// check there is at least 2 bytes in the frame
+							while(msgEventDataLength >= 2)
 							{
-								printf("Message Type %x\n", msgSubType);
-								printf("Message Event Data Length %d\n", msgEventDataLength);
-								printf("Message Subtype length %d\n", msgSubTypeLength);
 								
-							}
-
-							// ok, decode
-							if (msgSubType==0x18)
-							{
-
-								// cat tag add
-								// 01 bb 2a 00 b1 00 29 18 00 b4
-								// 00 b4 56 98 54 01 13 c5 b7 7f
-								// 00 03 00 00 00 02 5f fd ff ff
-								// 00 00 00 00 fe ff ff ff 00 00
-								// 00 00 12 00 23 01 00 00 b7
-
-
-								// cat tag remove
-								// 01 bf 2a 00 dc 00 29 18 00 b5
-								// 00 c3 56 98 54 01 13 c5 b7 7f
-								// 00 03 01 0a 00 02 5f fd ff ff
-								// 78 fd ff ff fe ff ff ff 02 00
-								// 00 00 13 00 23 01 00 00 12 16
-								// 00 b6 00 c5 56 98 54 00 01 af
-								// 8a 6e 04 7e be f6 03 b7
-
-
-								// manual???
-								// 01 c8 2a 00 b1 00 29 18 00 bd
-								// 00 cc 56 98 54 01 02 03 04 05
-								// 06 07 06 00 00 02 00 00 00 00
-								// 7a fd ff ff 00 00 00 00 03 00
-								// 00 00 13 00 23 01 00 00 fa
-
-								// cat - opening
-								// 01 ea 2a 00 b1 00 29 18 00 c1
-								// 00 cf 57 98 54 3d 05 1f db 63
-								// f6 01 00 00 00 02 6d 16 00 00
-								// 00 00 00 00 fe ff ff ff 00 00
-								// 00 00 14 00 23 01 00 00 13
-
-								// get the chip ID
-								BYTE chipID[20];
-
-
-								sprintf(chipID, "%02x%02x%02x%02x%02x%02x%02x",
-										rxPayload[15],
-										rxPayload[16],
-										rxPayload[17],
-										rxPayload[18],
-										rxPayload[19],
-										rxPayload[20],
-										rxPayload[21],
-										rxPayload[22]);
+								// get the packet length and type#
+								int msgSubTypeLength=packetStart[0]+1;
+								int msgSubType=packetStart[1];
+								
+								// check that we have data in this packert
+								// and that there is enougth data in the event frame
+								// to cover this new packet
+								if ((msgSubTypeLength<2))
+								{
+									printf("Malformed packet, Not enougth data in packet, is %d\n", msgSubTypeLength);
+									break;
+								}
 
 								if (verbose)
 								{
-									printf("ChipID: %s\n", chipID);
-								}
-
-								struct pet_entry *petEntry = NULL;
-								struct pet_entry *item;
-
-								// find the entry
-								TAILQ_FOREACH(item, &petlist_head, entries)
-								{
-									if (strcmp(item->chipID, chipID)==0)
-									{
-										petEntry=item;
-									}
-								}
-
-								// if we did not find it
-								if (petEntry==NULL)
-								{
-									if (debug)
-									{
-										printf("Adding new pet %s\n", chipID);
-									}
-									petEntry = (struct pet_entry *)malloc(sizeof(struct pet_entry));
-									memset(petEntry,0x0, sizeof(struct pet_entry));
-									petEntry->chipID= strdup(chipID);
-									petEntry->totalDailyFeedingTime=0;
-									petEntry->totalDailyEaten=0;
-
-									TAILQ_INSERT_TAIL(&petlist_head, petEntry, entries);
+									printf("Message Type %x\n", msgSubType);
+									printf("Message Subtype length %d\n", msgSubTypeLength);
 									
 								}
 
-
-								// get the lid state
-								BYTE lidState = rxPayload[22];
-
-								// and get the amount of time the lid is open
-								unsigned short openTime =
-										((unsigned short)rxPayload[23]) |
-										((unsigned short)rxPayload[24]<<8);
-
-
-
-								// 00 Tag triggered - closed to Open
-								// 01 Tag triggered - open to closed
-								// 04 User triggered - Open
-								// 05 User triggered - Close
-								// 06 zeroed when user opened
-
-								const char *lidStateString ="false";
-								const char *petFeedingStateString ="false";
-								const char *userOpenStateString ="false";
-								int petClosing=0;
-								int closing=0;
-
-
-								switch(lidState)
+								// ok, decode
+								if (msgSubType==0x18)
 								{
+
+									// cat tag add
+									// 01 bb 2a 00 b1 00 29 18 00 b4
+									// 00 b4 56 98 54 01 13 c5 b7 7f
+									// 00 03 00 00 00 02 5f fd ff ff
+									// 00 00 00 00 fe ff ff ff 00 00
+									// 00 00 12 00 23 01 00 00 b7
+
+
+									// cat tag remove
+									// 01 bf 2a 00 dc 00 29 18 00 b5
+									// 00 c3 56 98 54 01 13 c5 b7 7f
+									// 00 03 01 0a 00 02 5f fd ff ff
+									// 78 fd ff ff fe ff ff ff 02 00
+									// 00 00 13 00 23 01 00 00 12 16
+									// 00 b6 00 c5 56 98 54 00 01 af
+									// 8a 6e 04 7e be f6 03 b7
+
+
+									// manual???
+									// 01 c8 2a 00 b1 00 29 18 00 bd
+									// 00 cc 56 98 54 01 02 03 04 05
+									// 06 07 06 00 00 02 00 00 00 00
+									// 7a fd ff ff 00 00 00 00 03 00
+									// 00 00 13 00 23 01 00 00 fa
+
+									// cat - opening
+									// 01 ea 2a 00 b1 00 29 18 00 c1
+									// 00 cf 57 98 54 3d 05 1f db 63
+									// f6 01 00 00 00 02 6d 16 00 00
+									// 00 00 00 00 fe ff ff ff 00 00
+									// 00 00 14 00 23 01 00 00 13
+
+									// get the chip ID
+									BYTE chipID[20];
+
+
+									sprintf(chipID, "%02x%02x%02x%02x%02x%02x%02x",
+											packetStart[15-6],
+											packetStart[16-6],
+											packetStart[17-6],
+											packetStart[18-6],
+											packetStart[19-6],
+											packetStart[20-6],
+											packetStart[21-6],
+											packetStart[22-6]);
+
+									if (verbose)
+									{
+										printf("ChipID: %s\n", chipID);
+									}
+
+									struct pet_entry *petEntry = NULL;
+									struct pet_entry *item;
+
+									// find the entry
+									TAILQ_FOREACH(item, &petlist_head, entries)
+									{
+										if (strcmp(item->chipID, chipID)==0)
+										{
+											petEntry=item;
+										}
+									}
+
+									// if we did not find it
+									if (petEntry==NULL)
+									{
+										if (debug)
+										{
+											printf("Adding new pet %s\n", chipID);
+										}
+										petEntry = (struct pet_entry *)malloc(sizeof(struct pet_entry));
+										memset(petEntry,0x0, sizeof(struct pet_entry));
+										petEntry->chipID= strdup(chipID);
+										petEntry->totalDailyFeedingTime=0;
+										petEntry->totalDailyEaten=0;
+
+										TAILQ_INSERT_TAIL(&petlist_head, petEntry, entries);
+										
+									}
+
+
+									// get the lid state
+									BYTE lidState = packetStart[22-6];
+
+									// and get the amount of time the lid is open
+									unsigned short openTime =
+											((unsigned short)packetStart[23-6]) |
+											((unsigned short)packetStart[24-6]<<8);
+
+
+
 									// 00 Tag triggered - closed to Open
-									case 0x00:
-										lidStateString="true";
-										petFeedingStateString="true";
-										break;
-
 									// 01 Tag triggered - open to closed
-									case 0x01:
-										petClosing=1;
-										closing=1;
-										break;
-
 									// 04 User triggered - Open
-									case 0x04:
-										lidStateString="true";
-										userOpenStateString="true";
-										break;
-
 									// 05 User triggered - Close
-									case 0x05:
-										closing=1;
-										break;
-
 									// 06 zeroed when user opened
-									// this gets sent while its open once
-									// the user presses the close button
-									// it also then sends a 0x05 to state that
-									// its now closed.
-									case 0x06:
-										// the lid is still considered open because user
-										// opened it
-										lidStateString="true";
-										userOpenStateString="true";
-										// ok, it has been zero'ed,
-										// this this time we dont need to do anything here
-										// but if we start using the leftOpen and rightOpen for something
-										// it will need to be reset here. currently this is only used
-										// for animal open, so not currently an issue
-										break;
-								}
 
-								if (verbose)
-								{
-									printf("LidState %x, %s\n",lidState, lidStateString);
-								}
-
-								// send the lid state
-								sprintf(topicName, "petfeeder/%s/lidOpen", srcAddr);
-
-								res = mosquitto_publish(m, NULL, topicName,
-												strlen(lidStateString), lidStateString, 0, false);
-
-								// send the user open state
-								sprintf(topicName, "petfeeder/%s/userOpen", srcAddr);
-
-								res = mosquitto_publish(m, NULL, topicName,
-												strlen(userOpenStateString), userOpenStateString, 0, false);
+									const char *lidStateString ="false";
+									const char *petFeedingStateString ="false";
+									const char *userOpenStateString ="false";
+									int petClosing=0;
+									int closing=0;
 
 
-								// send the pet feeding state
-								sprintf(topicName, "pet/%s/petFeeding", chipID);
+									switch(lidState)
+									{
+										// 00 Tag triggered - closed to Open
+										case 0x00:
+											lidStateString="true";
+											petFeedingStateString="true";
+											break;
 
-								res = mosquitto_publish(m, NULL, topicName,
-												strlen(petFeedingStateString), petFeedingStateString, 0, false);
+										// 01 Tag triggered - open to closed
+										case 0x01:
+											petClosing=1;
+											closing=1;
+											break;
+
+										// 04 User triggered - Open
+										case 0x04:
+											lidStateString="true";
+											userOpenStateString="true";
+											break;
+
+										// 05 User triggered - Close
+										case 0x05:
+											closing=1;
+											break;
+
+										// 06 zeroed when user opened
+										// this gets sent while its open once
+										// the user presses the close button
+										// it also then sends a 0x05 to state that
+										// its now closed.
+										case 0x06:
+											// the lid is still considered open because user
+											// opened it
+											lidStateString="true";
+											userOpenStateString="true";
+											// ok, it has been zero'ed,
+											// this this time we dont need to do anything here
+											// but if we start using the leftOpen and rightOpen for something
+											// it will need to be reset here. currently this is only used
+											// for animal open, so not currently an issue
+											break;
+									}
+
+									if (verbose)
+									{
+										printf("LidState %x, %s\n",lidState, lidStateString);
+									}
+
+									// send the lid state
+									sprintf(topicName, "petfeeder/%s/lidOpen", srcAddr);
+
+									res = mosquitto_publish(m, NULL, topicName,
+													strlen(lidStateString), lidStateString, 0, false);
+
+									// send the user open state
+									sprintf(topicName, "petfeeder/%s/userOpen", srcAddr);
+
+									res = mosquitto_publish(m, NULL, topicName,
+													strlen(userOpenStateString), userOpenStateString, 0, false);
 
 
-								// now do the food weight
-								enum weights
-								{
-									weight_leftOpen,
-									weight_leftClose,
-									weight_rightOpen,
-									weight_rightClose
-								};
+									// send the pet feeding state
+									sprintf(topicName, "pet/%s/petFeeding", chipID);
 
-								const char *weightStrings[] = {"leftOpen", "leftClose", "rightOpen", "rightClose"};
-								float weights[4];
+									res = mosquitto_publish(m, NULL, topicName,
+													strlen(petFeedingStateString), petFeedingStateString, 0, false);
 
-								for (int weightEntry=0; weightEntry<4; weightEntry++)
-								{
-									char value[30];
 
-									float weight = getWeight(rxPayload, weightEntry);
+									// now do the food weight
+									enum weights
+									{
+										weight_leftOpen,
+										weight_leftClose,
+										weight_rightOpen,
+										weight_rightClose
+									};
 
-									// only publish the weights if closing because of user or pet.
-									// this is because the closing weight is only available on the
-									// closing message
+									const char *weightStrings[] = {"leftOpen", "leftClose", "rightOpen", "rightClose"};
+									float weights[4];
+
+									for (int weightEntry=0; weightEntry<4; weightEntry++)
+									{
+										char value[30];
+
+										float weight = getWeight(packetStart, weightEntry);
+
+										// only publish the weights if closing because of user or pet.
+										// this is because the closing weight is only available on the
+										// closing message
+										if (closing)
+										{
+											sprintf(topicName, "petfeeder/%s/%s_weight", srcAddr, weightStrings[weightEntry]);
+											sprintf(value, "%f", weight);
+
+											mosquitto_publish(m, NULL, topicName,
+															strlen(value), value, 0, false);
+										}
+
+										weights[weightEntry]=weight;
+									}
+
+									// if closing because of user or pet,
+									// make sure we publish a total amount left
 									if (closing)
 									{
-										sprintf(topicName, "petfeeder/%s/%s_weight", srcAddr, weightStrings[weightEntry]);
-										sprintf(value, "%f", weight);
+										char value[30];
+
+										// calculate the total left
+										float totalLeft = weights[weight_rightClose] + weights[weight_leftClose];
+
+										sprintf(topicName, "petfeeder/%s/weight", srcAddr);
+										sprintf(value, "%f", totalLeft);
 
 										mosquitto_publish(m, NULL, topicName,
 														strlen(value), value, 0, false);
 									}
 
-									weights[weightEntry]=weight;
-								}
+									// if closing because pet closing...
+									if (petClosing)
+									{
+										char value[30];
 
-								// if closing because of user or pet,
-								// make sure we publish a total amount left
-								if (closing)
-								{
-									char value[30];
+										// also publish the amount of time this pet was feeding
+										sprintf(topicName, "pet/%s/petFeedingTime", chipID);
+										sprintf(value, "%d", openTime);
 
-									// calculate the total left
-									float totalLeft = weights[weight_rightClose] + weights[weight_leftClose];
+										res = mosquitto_publish(m, NULL, topicName,
+														strlen(value), value, 0, false);
 
-									sprintf(topicName, "petfeeder/%s/weight", srcAddr);
-									sprintf(value, "%f", totalLeft);
+										// add the additional total feeding time..
+										petEntry->totalDailyFeedingTime+=openTime;
 
-									mosquitto_publish(m, NULL, topicName,
-													strlen(value), value, 0, false);
-								}
+										// we want to calculate the total eaten by this pet
+										float totalEaten = (weights[weight_leftOpen] - weights[weight_leftClose]) +
+												(weights[weight_rightOpen] - weights[weight_rightClose]);
 
-								// if closing because pet closing...
-								if (petClosing)
-								{
-									char value[30];
+										// and publish it
+										sprintf(topicName, "pet/%s/eaten", chipID);
+										sprintf(value, "%f", totalEaten);
 
-									// also publish the amount of time this pet was feeding
-									sprintf(topicName, "pet/%s/petFeedingTime", chipID);
-									sprintf(value, "%d", openTime);
+										mosquitto_publish(m, NULL, topicName,
+														strlen(value), value, 0, false);
 
-									res = mosquitto_publish(m, NULL, topicName,
-													strlen(value), value, 0, false);
+										// and keep the running total daily
+										petEntry->totalDailyEaten+=totalEaten;
 
-									// add the additional total feeding time..
-									petEntry->totalDailyFeedingTime+=openTime;
-
-									// we want to calculate the total eaten by this pet
-									float totalEaten = (weights[weight_leftOpen] - weights[weight_leftClose]) +
-											(weights[weight_rightOpen] - weights[weight_rightClose]);
-
-									// and publish it
-									sprintf(topicName, "pet/%s/eaten", chipID);
-									sprintf(value, "%f", totalEaten);
-
-									mosquitto_publish(m, NULL, topicName,
-													strlen(value), value, 0, false);
-
-									// and keep the running total daily
-									petEntry->totalDailyEaten+=totalEaten;
-
-									// the totals have also changed, so re-publish
-									// start with the pet total feeding time
-									sendDailyUpdate(m, petEntry);
+										// the totals have also changed, so re-publish
+										// start with the pet total feeding time
+										sendDailyUpdate(m, petEntry);
+									}
+									
+									stateUpdated=1;
 								}
 								
-								stateUpdated=1;
+								// move to next packet
+								msgEventDataLength-=msgSubTypeLength;
+								packetStart+=msgSubTypeLength;
 							}
 
 							// send the ACK
