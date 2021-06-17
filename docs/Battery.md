@@ -18,7 +18,6 @@ From my feeder, measuring the battery voltage:
 | 5.77v   |   187   |
 | 5.66v   |   182   |
 
-
 # Predicting
 
 If we assume a linear path, 
