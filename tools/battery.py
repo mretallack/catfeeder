@@ -25,7 +25,7 @@ print("C="+str(c))
 rawMeasurements=[]
 vMeasurements=[]
 
-for i in range(255):
+for i in range(160,200):
 	rawMeasurements.append(i)
 	res=(i*m) +c
 	vMeasurements.append(res)
