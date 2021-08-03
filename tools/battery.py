@@ -7,12 +7,15 @@ import matplotlib.pyplot as plt
 # set the points here
 # use y for voltage
 # and x for raw value
-y=[5.254, 5.77, 5.85, 5.96]
-x=[164, 187, 189, 193]
+y=[5.254, 5.520, 5.77, 5.85, 5.96]
+x=[164, 179, 187, 189, 193]
 
-m=(y[1]-y[0])/(x[1]-x[0])
+f=0
+l=4
 
-c= y[0] - (x[0] * m)
+m=(y[l]-y[f])/(x[l]-x[f])
+
+c= y[f] - (x[f] * m)
 
 
 print("M="+str(m))
