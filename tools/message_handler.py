@@ -44,14 +44,25 @@ new_key = [0x00,0x00,0x00,0x00,
 
 			0x00,
 			# 26 - Left hand open
-			0x00,0x00,0x00,0x00,
+			# weight low2: 123
+			# weight high1: 130
+			# weight high2: 106
+			# second byte: 0x7b, 7b, 0x7b
+
+			0x00,0x7b,130,106,
 			# 30 - Left hand close
 			169,99,211,139,
 			#0x00,0x00,0x00,0x00,
 			# 34 - Right hand open
-			0x00,0x00,0x00,0x00,
+			# weight low2: 48, 42, 45, 4d, so first seems to be 0x40
+			# weight high1: 67
+			# weight high2: 142
+			# the second byte seems to have 0x4x, but cannot seem to zero to be able to find the others
+			# c, 0x9, 0x09, 0x0e
+			# setting second to 4, not sure
+			00,0x44,67,142,
 			# 38 - Right hand close
-			# TODO: the LSB is wrong, 
+			# TODO: the LSB is wrong, possible values: 
 			0,154,229,156,
 			0x00,0x00,0x00,0x00,
 			0x00,0x00,0x00,0x00,
@@ -77,16 +88,24 @@ def getWeight(packetStart, weightEntry):
 
 		#float weight=((float)rawWeight)/100;
 
-		print("weight low1: "+str(packetStart[26-6 + (weightEntry*4)]))
-		print("weight low2: "+str(packetStart[27-6 + (weightEntry*4)]))
-		print("weight high1: "+str(packetStart[28-6 + (weightEntry*4)]))
-		print("weight high2: "+str(packetStart[29-6 + (weightEntry*4)]))
+		print("weight low1: "+str(hex(packetStart[26-6 + (weightEntry*4)])))
+		print("weight low2: "+str(hex(packetStart[27-6 + (weightEntry*4)])))
+		print("weight high1: "+str(hex(packetStart[28-6 + (weightEntry*4)])))
+		print("weight high2: "+str(hex(packetStart[29-6 + (weightEntry*4)])))
 
 		# // get the weight
-		rawWeight =	int(packetStart[26-6 + (weightEntry*4)]) | \
-					(int(packetStart[27-6 + (weightEntry*4)])<<8) | \
-					(int(packetStart[28-6 + (weightEntry*4)])<<16) | \
-					(int(packetStart[29-6 + (weightEntry*4)])<<24)
+		#rawWeight =	int(packetStart[26-6 + (weightEntry*4)]) | \
+		#			(int(packetStart[27-6 + (weightEntry*4)])<<8) | \
+		#			(int(packetStart[28-6 + (weightEntry*4)])<<16) | \
+		#			(int(packetStart[29-6 + (weightEntry*4)])<<24)
+
+		extract=[packetStart[26-6 + (weightEntry*4)],
+				 packetStart[27-6 + (weightEntry*4)],
+				 packetStart[28-6 + (weightEntry*4)],
+				 packetStart[29-6 + (weightEntry*4)]]
+
+		
+		rawWeight = int.from_bytes( extract, "little", signed=True )
 
 
 		weight=float(rawWeight)/100;
@@ -113,12 +132,25 @@ def getWeight(packetStart, weightEntry):
 		# weight high2: 99
 
 			
+		# to get last@
+		# open
+		# zero
+		# close
+		# record number
+		# 114
+		# 237 (1)
+		# 
+
+
 
 def decodePacket(msgBytes, key):
 
 
 	decoded=b''
 	o=0
+
+	msgBytes=msgBytes[:len(key)]
+
 	for i in msgBytes:
 		decoded+=(bytes([i ^ key[o]]))
 		o=o+1
@@ -134,17 +166,17 @@ def decodePacket(msgBytes, key):
 	msgEventDataLength-=6;
 	
 	# check there is at least 2 bytes in the frame
-	while msgEventDataLength >= 2:
+	while len(packetStart) >= 2:
 
 
 		# for type 0x18, the length should be 0x29
 		msgSubTypeLength=packetStart[0]+1
 		msgSubType=packetStart[1]
 
-		if msgSubTypeLength<2:
-		
-			print("Malformed packet, Not enougth data in packet, is "+str(msgSubTypeLength))
-			break
+		#if msgSubTypeLength<2:
+		#
+		#	print("Malformed packet, Not enougth data in packet, is "+str(msgSubTypeLength))
+		#	break
 
 		print(decoded.hex())
 
