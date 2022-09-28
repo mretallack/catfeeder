@@ -62,8 +62,8 @@ new_key = [0x00,0x00,0x00,0x00,
 			# setting second to 4, not sure
 			00,0x44,67,142,
 			# 38 - Right hand close
-			# TODO: the LSB is wrong, possible values: 
-			0,154,229,156,
+			#0,154,229,0x9C,
+			0xac,0x64,0x1a,0x63,
 			0x00,0x00,0x00,0x00,
 			0x00,0x00,0x00,0x00,
 			0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,0x00]
@@ -186,6 +186,24 @@ def decodePacket(msgBytes, key):
 		if msgSubType == 0x18:
 
 			print("Message is a Feeder open / close action")
+			
+			
+			# 0133c08c2b6229
+			# 01
+			# 18 bf e0 22 75 8c 70 df 
+			# reader id
+			# 01 02 03 04 05 06 07
+			# off14 - feeder state 
+			# 05 
+			# 14 
+			# 00 93 
+			# 24 31 00 00 
+			# bf 31 00 00 
+			# 87 10 00 00 
+			# 83 ee ff ff 
+			# da 6f 9e62d0b7d8
+			
+			
 			
 			# get chip ID
 			#sprintf(chipID, "%02x%02x%02x%02x%02x%02x%02x",
